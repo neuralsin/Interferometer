@@ -68,18 +68,19 @@ export const createDetectorScreen = () => {
   group.userData.updateFringes = (state, elapsed) => {
     const {
       wavelength, laserLinewidth, beamWaist,
-      armLengthX, armLengthY,
-      mirrorTranslationX, mirrorTranslationY,
-      mirrorTiltX, mirrorTiltY,
-      shotNoiseEnabled, detectorResolution,
+      mirror1PosX, mirror1PosZ, mirror2PosX, mirror2PosZ,
+      mirror1Tip, mirror2Tip,
+      shotNoiseEnabled, detectorArrayWidth,
     } = state;
 
-    const opd = 2 * ((armLengthX + mirrorTranslationX) - (armLengthY + mirrorTranslationY));
+    const armX = Math.sqrt(mirror1PosX ** 2 + mirror1PosZ ** 2);
+    const armY = Math.sqrt(mirror2PosX ** 2 + mirror2PosZ ** 2);
+    const opd = 2 * (armX - armY);
 
     // Gaussian beam radius at detector
     const zR = rayleighRange(beamWaist, wavelength);
-    const wzX = beamRadius(beamWaist, armLengthX * 2, zR);
-    const wzY = beamRadius(beamWaist, armLengthY * 2, zR);
+    const wzX = beamRadius(beamWaist, armX * 2, zR);
+    const wzY = beamRadius(beamWaist, armY * 2, zR);
 
     // Coherence visibility
     const vis = fringeVisibility(opd, laserLinewidth);
@@ -88,14 +89,14 @@ export const createDetectorScreen = () => {
     const u = fringeMaterial.uniforms;
     u.u_k.value = 2 * Math.PI / wavelength;
     u.u_opdCenter.value = opd;
-    u.u_tiltX.value = mirrorTiltX;
-    u.u_tiltY.value = mirrorTiltY;
+    u.u_tiltX.value = mirror1Tip;
+    u.u_tiltY.value = mirror2Tip;
     u.u_visibility.value = vis;
     u.u_beamRadiusX.value = wzX;
     u.u_beamRadiusY.value = wzY;
     u.u_time.value = elapsed;
     u.u_noiseAmp.value = shotNoiseEnabled ? 0.03 : 0.0;
-    u.u_resolution.value.set(detectorResolution, detectorResolution);
+    u.u_resolution.value.set(detectorArrayWidth, detectorArrayWidth);
   };
 
   return group;

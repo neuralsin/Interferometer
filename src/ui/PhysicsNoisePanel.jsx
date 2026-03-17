@@ -1,7 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
 import { rayleighRange, beamRadius, gouyPhase } from '../physics/gaussianBeam.js';
-import { coherenceLength as calcCoherenceLength } from '../physics/coherenceModel.js';
+import { coherenceLength as calcCoherenceLength, lorentzianPSD } from '../physics/coherenceModel.js';
+import { seismicNoise, wienerPhaseNoise } from '../physics/noiseGenerator.js';
 import { SliderControl } from './BeginnerPanel.jsx';
 
 /**
@@ -21,9 +22,10 @@ const PhysicsNoisePanel = () => {
   const beamCanvasRef = useRef(null);
 
   // Derived backend values
+  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
   const zR = rayleighRange(state.beamWaist, state.wavelength);
-  const wz = beamRadius(state.beamWaist, state.armLengthX * 2, zR);
-  const gouy = gouyPhase(state.armLengthX * 2, zR);
+  const wz = beamRadius(state.beamWaist, armX * 2, zR);
+  const gouy = gouyPhase(armX * 2, zR);
   const cohLength = calcCoherenceLength(state.laserLinewidth);
 
   // Draw Gaussian beam profile (matching V3 canvas)
@@ -79,12 +81,33 @@ const PhysicsNoisePanel = () => {
     return () => window.removeEventListener('resize', resize);
   }, [state.beamWaist, state.wavelength]);
 
-  // Animated noise bars
-  const noiseBars = Array.from({ length: 15 }, (_, i) => ({
-    h: 20 + Math.random() * 80,
-    o: 0.1 + Math.random() * 0.9,
-    delay: (i * 0.1).toFixed(1),
-  }));
+  // Compute noise bars from real PSD (lorentzianPSD from coherenceModel.js)
+  const noiseBars = useMemo(() => {
+    const freqs = [0.1, 0.5, 1, 5, 10, 50, 100, 200, 500, 1000, 2000, 5000, 8000, 10000, 15000];
+    const maxPSD = lorentzianPSD(0, state.laserLinewidth);
+    return freqs.map((f, i) => {
+      const psd = lorentzianPSD(f, state.laserLinewidth);
+      const normalized = maxPSD > 0 ? (psd / maxPSD) : 0;
+      const h = Math.max(5, normalized * 100);
+      return { h, o: Math.min(1, h / 100 + 0.1), delay: (i * 0.1).toFixed(1) };
+    });
+  }, [state.laserLinewidth]);
+
+  // Compute live seismic injection RMS from noiseGenerator.js
+  const seismicRMS = useMemo(() => {
+    const data = seismicNoise(256, 1/60, 1e-9);
+    let sumSq = 0;
+    for (let i = 0; i < data.length; i++) sumSq += data[i] * data[i];
+    return Math.sqrt(sumSq / data.length);
+  }, [state.seismicNoiseEnabled]);
+
+  // Compute live phase noise integral from noiseGenerator.js
+  const phaseNoiseIntegral = useMemo(() => {
+    const data = wienerPhaseNoise(256, 1/60, state.laserLinewidth);
+    let sumSq = 0;
+    for (let i = 0; i < data.length; i++) sumSq += data[i] * data[i];
+    return Math.sqrt(sumSq / data.length);
+  }, [state.laserLinewidth, state.phaseNoiseEnabled]);
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -190,8 +213,8 @@ const PhysicsNoisePanel = () => {
 
             {/* Side Metrics */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <MetricTile label="Seismic Injection" value="1.42e-12" unit="m/√Hz" progress={68} />
-              <MetricTile label="Phase Noise Integral" value="0.084" unit="rad RMS" progress={24} />
+              <MetricTile label="Seismic Injection" value={seismicRMS.toExponential(2)} unit="m/√Hz" progress={Math.min(100, seismicRMS * 1e12 * 50)} />
+              <MetricTile label="Phase Noise Integral" value={phaseNoiseIntegral.toFixed(3)} unit="rad RMS" progress={Math.min(100, phaseNoiseIntegral * 300)} />
               <button className="btn-ghost" style={{ marginTop: 'auto', width: '100%', justifyContent: 'center' }}>
                 <DownloadSvg /> Export PSD_Data
               </button>
@@ -218,8 +241,8 @@ const PhysicsNoisePanel = () => {
                 onChange={(v) => setParam('squeezingParam', v)}
                 formatValue={(v) => v.toFixed(2)} />
               <SliderControl label="Angle" unit="°"
-                value={state.polarizerAngle * 180 / Math.PI} min={0} max={360} step={1}
-                onChange={(deg) => setParam('polarizerAngle', deg * Math.PI / 180)}
+                value={state.squeezingAngle * 180 / Math.PI} min={0} max={360} step={1}
+                onChange={(deg) => setParam('squeezingAngle', deg * Math.PI / 180)}
                 formatValue={(v) => v.toFixed(0)} />
             </div>
             {/* Phase Space Visualization */}
@@ -232,7 +255,7 @@ const PhysicsNoisePanel = () => {
                   border: '1px solid rgba(255,255,255,0.6)',
                   background: 'rgba(255,255,255,0.05)',
                   borderRadius: '50%',
-                  transform: `rotate(${state.polarizerAngle * 180 / Math.PI}deg)`,
+                  transform: `rotate(${state.squeezingAngle * 180 / Math.PI}deg)`,
                   boxShadow: '0 0 15px rgba(255,255,255,0.1)',
                   transition: 'transform 300ms ease',
                 }} />
@@ -256,10 +279,10 @@ const PhysicsNoisePanel = () => {
                 Quantum Efficiency (η)
               </label>
               <div style={{ position: 'relative' }}>
-                <input className="input-field" type="text" value={state.quantumEfficiency.toFixed(2)}
-                  onChange={(e) => setParam('quantumEfficiency', Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)))} />
+                <input className="input-field" type="text" value={state.detectorQE.toFixed(2)}
+                  onChange={(e) => setParam('detectorQE', Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)))} />
                 <span style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)' }}>
-                  {(state.quantumEfficiency * 100).toFixed(0)}%
+                  {(state.detectorQE * 100).toFixed(0)}%
                 </span>
               </div>
             </div>
@@ -268,8 +291,8 @@ const PhysicsNoisePanel = () => {
                 Dark Current (i_d)
               </label>
               <div style={{ position: 'relative' }}>
-                <input className="input-field" type="text" value={state.darkCurrent.toFixed(1)}
-                  onChange={(e) => setParam('darkCurrent', parseFloat(e.target.value) || 0)} />
+                <input className="input-field" type="text" value={state.detectorDarkCurrent.toFixed(1)}
+                  onChange={(e) => setParam('detectorDarkCurrent', parseFloat(e.target.value) || 0)} />
                 <span style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', textTransform: 'uppercase' }}>
                   nA/cm²
                 </span>
@@ -278,9 +301,9 @@ const PhysicsNoisePanel = () => {
           </div>
 
           {/* Grid Res + Cooling */}
-          <DetectorRow icon={<GridSvg />} label="Grid Resolution" sublabel={`${state.detectorResolution} x ${state.detectorResolution} PX`}
+          <DetectorRow icon={<GridSvg />} label="Grid Resolution" sublabel={`${state.detectorArrayWidth} x ${state.detectorArrayHeight} PX`}
             right={
-              <select value={state.detectorResolution} onChange={(e) => setParam('detectorResolution', parseInt(e.target.value))}>
+              <select value={state.detectorArrayWidth} onChange={(e) => setParam('detectorArrayWidth', parseInt(e.target.value))}>
                 <option value={128}>128×128</option>
                 <option value={256}>UHD-256</option>
                 <option value={512}>HD-512</option>

@@ -43,25 +43,25 @@ const NOISE_DT = 1 / 60;
 export const generateAdvancedFringePattern = (state, elapsed) => {
   const {
     wavelength, laserLinewidth, laserPower, beamWaist,
-    armLengthX, armLengthY,
-    mirrorTranslationX, mirrorTranslationY,
-    mirrorTiltX, mirrorTiltY,
-    temperature, mountMaterial,
+    mirror1PosX, mirror1PosZ, mirror2PosX, mirror2PosZ,
+    mirror1Tip, mirror2Tip,
+    envTemperature, mountMaterial,
     thermalDriftEnabled, phaseNoiseEnabled, seismicNoiseEnabled,
     shotNoiseEnabled, squeezingParam,
-    darkCurrent, quantumEfficiency,
-    detectorResolution,
-    gwEnabled, gwStrain, gwFrequency, armLengthMultiplier,
+    detectorDarkCurrent, detectorQE,
+    detectorArrayWidth,
+    gwEnabled, gwStrain, gwFrequency,
   } = state;
 
-  const N = detectorResolution;
+  const armLengthX = Math.sqrt(mirror1PosX ** 2 + mirror1PosZ ** 2);
+  const armLengthY = Math.sqrt(mirror2PosX ** 2 + mirror2PosZ ** 2);
+  const N = detectorArrayWidth;
   const k = TWO_PI / wavelength;
   const detectorSize = 0.01; // 10mm detector
   const halfSize = detectorSize / 2;
 
   // ---- 1. Thermal OPD shift ----
-  const refTemp = 293.15;
-  const deltaT = temperature - refTemp;
+  const deltaT = envTemperature - 293.15; // deviation from 20°C reference
   const thermalOPD = thermalDriftEnabled
     ? thermalOPDShift(armLengthX, armLengthY, deltaT, mountMaterial)
     : 0;
@@ -91,7 +91,7 @@ export const generateAdvancedFringePattern = (state, elapsed) => {
   const seismicDy = (seismicNoiseEnabled && cachedSeismicY) ? cachedSeismicY[nIdx] : 0;
 
   // ---- 3. GW strain ----
-  const effectiveArmLength = armLengthX * armLengthMultiplier;
+  const effectiveArmLength = armLengthX;
   let gwOPD = 0;
   if (gwEnabled) {
     const h = sinusoidalStrain(elapsed, gwStrain, gwFrequency);
@@ -100,8 +100,8 @@ export const generateAdvancedFringePattern = (state, elapsed) => {
   }
 
   // ---- 4. Effective arm lengths with all perturbations ----
-  const effArmX = armLengthX + mirrorTranslationX + seismicDx;
-  const effArmY = armLengthY + mirrorTranslationY + seismicDy;
+  const effArmX = armLengthX + seismicDx;
+  const effArmY = armLengthY + seismicDy;
 
   // ---- 5. Base OPD ----
   const baseOPD = 2 * (effArmX - effArmY) + thermalOPD + gwOPD;
@@ -133,7 +133,7 @@ export const generateAdvancedFringePattern = (state, elapsed) => {
       const ampY = Math.exp(-(r * r) / (wzY * wzY));
 
       // Local OPD variation from mirror tilt
-      const opdLocal = baseOPD + 2 * (mirrorTiltX * x + mirrorTiltY * y);
+      const opdLocal = baseOPD + 2 * (mirror1Tip * x + mirror2Tip * y);
 
       // Phase with noise
       let phase = k * opdLocal + phaseNoiseDelta;
@@ -157,8 +157,8 @@ export const generateAdvancedFringePattern = (state, elapsed) => {
   // ---- 10. Apply detector imperfections ----
   const finalData = applyDetectorEffects(data, {
     shotNoiseEnabled,
-    darkCurrent,
-    quantumEfficiency,
+    darkCurrent: detectorDarkCurrent,
+    quantumEfficiency: detectorQE,
     photonScale: N_photons,
   });
 

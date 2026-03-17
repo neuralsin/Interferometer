@@ -1,138 +1,245 @@
-import React from 'react';
+import React, { useState } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
 import { SliderControl } from './BeginnerPanel.jsx';
 
 const MOUNT_MATERIALS = [
-  { value: 'invar', label: 'INVAR (α≈1.2e-6)' },
-  { value: 'aluminum', label: 'ALUMINUM (α≈23e-6)' },
-  { value: 'steel', label: 'STEEL (α≈17e-6)' },
+  { value: 'invar', label: 'INVAR (α≈1.2e-6/K)' },
+  { value: 'aluminum', label: 'ALUMINUM (α≈23e-6/K)' },
+  { value: 'steel', label: 'STEEL (α≈17e-6/K)' },
+  { value: 'zerodur', label: 'ZERODUR (α≈0.05e-6/K)' },
+  { value: 'fused_silica', label: 'FUSED SILICA (α≈0.55e-6/K)' },
 ];
 
-const ToggleRow = ({ label, paramKey }) => {
+const POLARIZATIONS = [
+  { value: 'horizontal', label: 'H (Linear)' },
+  { value: 'vertical', label: 'V (Linear)' },
+  { value: 'diagonal', label: 'D (+45°)' },
+  { value: 'circular', label: 'R (Circular)' },
+];
+
+const Section = ({ title, children, defaultOpen = true }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <button onClick={() => setOpen(!open)} style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+        background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0',
+        color: 'var(--text-silver-200)',
+      }}>
+        <span className="section-dot" />
+        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', flex: 1, textAlign: 'left' }}>{title}</span>
+        <span style={{ fontSize: 10, color: 'var(--text-mercury)', opacity: 0.5 }}>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && <div style={{ paddingLeft: 14 }}>{children}</div>}
+    </div>
+  );
+};
+
+const Toggle = ({ label, paramKey }) => {
   const value = useSimulationStore((s) => s[paramKey]);
   const setParam = useSimulationStore((s) => s.setParam);
   return (
     <div className="toggle-row">
       <span className="toggle-row-label">{label}</span>
       <button className="toggle-track" data-active={value}
-        onClick={() => setParam(paramKey, !value)} aria-label={`Toggle ${label}`} />
+        onClick={() => setParam(paramKey, !value)} />
     </div>
   );
 };
 
+const NumberRow = ({ label, unit, value, paramKey, convert = 1, precision = 3 }) => {
+  const setParam = useSimulationStore((s) => s.setParam);
+  return (
+    <div className="number-input-row" style={{ marginBottom: 6 }}>
+      <label>{label}</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <input type="number" step="any" value={(value / convert).toFixed(precision)}
+          onChange={(e) => setParam(paramKey, parseFloat(e.target.value) * convert)}
+          style={{ width: 80 }} />
+        {unit && <span style={{ fontSize: 8, color: 'var(--text-mercury)', opacity: 0.6 }}>{unit}</span>}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Research Panel — ALL 60+ simulation variables
+ * Every slider/input directly writes to simulationStore → drives physics engines in real-time
+ */
 const ResearchPanel = () => {
   const store = useSimulationStore();
   const { setParam } = store;
+  const armX = Math.sqrt(store.mirror1PosX ** 2 + store.mirror1PosZ ** 2);
+  const armY = Math.sqrt(store.mirror2PosX ** 2 + store.mirror2PosZ ** 2);
 
   return (
     <>
-      {/* Laser Source */}
-      <div>
-        <h3 className="section-header" style={{ marginBottom: 20 }}>
-          <span className="section-dot" /> Laser Source
-        </h3>
+      {/* ===== LASER SOURCE ===== */}
+      <Section title="Laser Engine">
         <SliderControl label="Wavelength" unit="nm"
           value={store.wavelength * 1e9} min={380} max={1550} step={0.1}
-          onChange={(nm) => setParam('wavelength', nm * 1e-9)}
-          formatValue={(v) => v.toFixed(1)} />
+          onChange={(v) => setParam('wavelength', v * 1e-9)} formatValue={(v) => v.toFixed(1)} />
         <SliderControl label="Power" unit="mW"
-          value={store.laserPower * 1e3} min={0.001} max={100} step={0.001}
-          onChange={(mw) => setParam('laserPower', mw * 1e-3)}
-          formatValue={(v) => v.toFixed(3)} />
-        <div className="number-input-row">
-          <label>Linewidth (MHz)</label>
-          <input type="number" value={(store.laserLinewidth * 1e-6).toFixed(1)}
-            onChange={(e) => setParam('laserLinewidth', parseFloat(e.target.value) * 1e6)} />
+          value={store.laserPower * 1e3} min={0.01} max={100} step={0.01}
+          onChange={(v) => setParam('laserPower', v * 1e-3)} formatValue={(v) => v.toFixed(2)} />
+        <SliderControl label="Beam Waist (w₀)" unit="mm"
+          value={store.beamWaist * 1e3} min={0.05} max={5} step={0.01}
+          onChange={(v) => setParam('beamWaist', v * 1e-3)} formatValue={(v) => v.toFixed(2)} />
+        <NumberRow label="Linewidth" unit="MHz" value={store.laserLinewidth} paramKey="laserLinewidth" convert={1e6} precision={1} />
+        <div style={{ marginBottom: 8 }}>
+          <label className="label-nano" style={{ display: 'block', marginBottom: 6 }}>Polarization</label>
+          <select value={store.polarizationInput} onChange={(e) => setParam('polarizationInput', e.target.value)} style={{ width: '100%' }}>
+            {POLARIZATIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
         </div>
-      </div>
+        {/* Derived readouts */}
+        <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.6, marginTop: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+            <span>ν_source:</span><span>{(3e8 / store.wavelength / 1e12).toFixed(2)} THz</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+            <span>Lc (coherence):</span><span>{(3e8 / store.laserLinewidth * 100).toFixed(1)} cm</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Φ (photon flux):</span><span>{((store.laserPower * store.wavelength) / (6.626e-34 * 3e8)).toExponential(2)} /s</span>
+          </div>
+        </div>
+      </Section>
 
-      {/* Arm Configuration */}
-      <div>
-        <h3 className="section-header" style={{ marginBottom: 20 }}>
-          <span className="section-dot" /> Arm Geometries
-        </h3>
-        <div style={{ background: 'rgba(255,255,255,0.05)', padding: 16, borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)', marginBottom: 12 }}>
-          <p style={{ fontSize: 9, color: 'var(--text-slate)', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Arm 1 (Static)</p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
-            <span style={{ color: 'var(--text-slate)', opacity: 0.6 }}>Length:</span>
-            <span style={{ color: '#fff' }}>{(store.armLengthX * 1e3).toFixed(3)} mm</span>
+      {/* ===== ARM GEOMETRIES ===== */}
+      <Section title="Arm Geometries">
+        <div style={{ background: 'rgba(255,255,255,0.04)', padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)', marginBottom: 8 }}>
+          <p style={{ fontSize: 8, color: 'var(--text-slate)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Primary Path (S1)</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 11, color: '#fff' }}>
+            <span style={{ color: 'var(--text-mercury)', opacity: 0.5 }}>L_fixed:</span>
+            <span>{(armX * 1e3).toFixed(5)} mm</span>
           </div>
         </div>
-        <div style={{ background: 'rgba(255,255,255,0.05)', padding: 16, borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)', marginBottom: 12 }}>
-          <p style={{ fontSize: 9, color: 'var(--text-slate)', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Arm 2 (Piezo)</p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontFamily: 'var(--font-mono)', marginBottom: 12 }}>
-            <span style={{ color: 'var(--text-slate)', opacity: 0.6 }}>Pos:</span>
-            <span className="value-readout-sm">{(store.mirrorTranslationX * 1e12).toFixed(2)} pm</span>
+        <div style={{ background: 'rgba(255,255,255,0.04)', padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)', marginBottom: 8 }}>
+          <p style={{ fontSize: 8, color: 'var(--text-slate)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Secondary Path (S2)</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 11, marginBottom: 8 }}>
+            <span style={{ color: 'var(--text-mercury)', opacity: 0.5 }}>δ_drift:</span>
+            <span style={{ color: '#fff' }}>{((store.mirror2PosZ + 0.175) * 1e12).toFixed(4)} pm</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <button className="btn-ghost" style={{ fontSize: 9, padding: '8px 12px' }}
-              onClick={() => setParam('mirrorTranslationX', store.mirrorTranslationX - 1e-12)}>- Δx</button>
-            <button className="btn-ghost" style={{ fontSize: 9, padding: '8px 12px' }}
-              onClick={() => setParam('mirrorTranslationX', store.mirrorTranslationX + 1e-12)}>+ Δx</button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <button className="btn-ghost" style={{ fontSize: 8, padding: '6px 8px' }}
+              onClick={() => setParam('mirror2PosZ', store.mirror2PosZ - 10e-12)}>Coarse-</button>
+            <button className="btn-ghost" style={{ fontSize: 8, padding: '6px 8px' }}
+              onClick={() => setParam('mirror2PosZ', store.mirror2PosZ + 10e-12)}>Fine+</button>
           </div>
         </div>
-        <SliderControl label="Tip/Tilt X" unit="μrad"
-          value={store.mirrorTiltX * 1e6} min={-100} max={100} step={0.1}
-          onChange={(urad) => setParam('mirrorTiltX', urad * 1e-6)}
-          formatValue={(v) => v.toFixed(1)} />
-        <SliderControl label="Tip/Tilt Y" unit="μrad"
-          value={store.mirrorTiltY * 1e6} min={-100} max={100} step={0.1}
-          onChange={(urad) => setParam('mirrorTiltY', urad * 1e-6)}
-          formatValue={(v) => v.toFixed(1)} />
-      </div>
+        <SliderControl label="Mirror1 Tip" unit="mrad"
+          value={store.mirror1Tip * 1e3} min={-2} max={2} step={0.01}
+          onChange={(v) => setParam('mirror1Tip', v * 1e-3)} formatValue={(v) => v.toFixed(2)} />
+        <SliderControl label="Mirror2 Tip" unit="mrad"
+          value={store.mirror2Tip * 1e3} min={-2} max={2} step={0.01}
+          onChange={(v) => setParam('mirror2Tip', v * 1e-3)} formatValue={(v) => v.toFixed(2)} />
+        <NumberRow label="M1 Reflectivity" unit="" value={store.mirror1Reflectivity} paramKey="mirror1Reflectivity" precision={4} />
+        <NumberRow label="M2 Reflectivity" unit="" value={store.mirror2Reflectivity} paramKey="mirror2Reflectivity" precision={4} />
+      </Section>
 
-      {/* Environmental */}
-      <div>
-        <h3 className="section-header" style={{ marginBottom: 20 }}>
-          <span className="section-dot" /> Environmental
-        </h3>
-        <ToggleRow label="Vibration Iso" paramKey="seismicNoiseEnabled" />
-        <ToggleRow label="Thermal Drift" paramKey="thermalDriftEnabled" />
-        <ToggleRow label="Phase Noise" paramKey="phaseNoiseEnabled" />
-        <SliderControl label="Amb. Temp" unit="°C"
-          value={store.temperature - 273.15} min={-10} max={60} step={0.1}
-          onChange={(c) => setParam('temperature', c + 273.15)}
-          formatValue={(v) => v.toFixed(1)} />
-        <div style={{ marginBottom: 12 }}>
-          <label className="label-micro" style={{ display: 'block', marginBottom: 8 }}>Mount Material</label>
-          <select value={store.mountMaterial}
-            onChange={(e) => setParam('mountMaterial', e.target.value)}
-            style={{ width: '100%' }}>
+      {/* ===== BEAM SPLITTER ===== */}
+      <Section title="Beam Splitter" defaultOpen={false}>
+        <SliderControl label="BS Reflectivity" unit=""
+          value={store.bsReflectivity} min={0} max={1} step={0.01}
+          onChange={(v) => { setParam('bsReflectivity', v); setParam('bsTransmissivity', 1 - v); }}
+          formatValue={(v) => v.toFixed(2)} />
+        <NumberRow label="Thickness" unit="mm" value={store.bsThickness} paramKey="bsThickness" convert={1e-3} precision={2} />
+        <NumberRow label="n (refractive)" unit="" value={store.bsRefractiveIndex} paramKey="bsRefractiveIndex" precision={4} />
+        <NumberRow label="Wedge Angle" unit="mrad" value={store.bsWedgeAngle} paramKey="bsWedgeAngle" convert={1e-3} precision={2} />
+        <NumberRow label="Phase Shift" unit="rad" value={store.bsCoatingPhaseShift} paramKey="bsCoatingPhaseShift" precision={3} />
+      </Section>
+
+      {/* ===== COMPENSATOR ===== */}
+      <Section title="Compensator Plate" defaultOpen={false}>
+        <Toggle label="Compensator" paramKey="compensatorEnabled" />
+        <NumberRow label="Thickness" unit="mm" value={store.compensatorThickness} paramKey="compensatorThickness" convert={1e-3} precision={2} />
+        <NumberRow label="n (refractive)" unit="" value={store.compensatorRefractiveIndex} paramKey="compensatorRefractiveIndex" precision={4} />
+        <NumberRow label="Tilt" unit="mrad" value={store.compensatorTiltAngle} paramKey="compensatorTiltAngle" convert={1e-3} precision={2} />
+      </Section>
+
+      {/* ===== ENVIRONMENT ===== */}
+      <Section title="Environment">
+        <SliderControl label="Temperature" unit="°C"
+          value={store.envTemperature - 273.15} min={-20} max={80} step={0.1}
+          onChange={(v) => setParam('envTemperature', v + 273.15)} formatValue={(v) => v.toFixed(1)} />
+        <NumberRow label="Pressure" unit="kPa" value={store.envPressure} paramKey="envPressure" convert={1e3} precision={1} />
+        <SliderControl label="Humidity" unit="%"
+          value={store.envHumidity * 100} min={0} max={100} step={1}
+          onChange={(v) => setParam('envHumidity', v / 100)} formatValue={(v) => v.toFixed(0)} />
+        <NumberRow label="n (medium)" unit="" value={store.envRefractiveIndex} paramKey="envRefractiveIndex" precision={6} />
+        <div style={{ marginBottom: 8 }}>
+          <label className="label-nano" style={{ display: 'block', marginBottom: 6 }}>Mount Material</label>
+          <select value={store.mountMaterial} onChange={(e) => setParam('mountMaterial', e.target.value)} style={{ width: '100%' }}>
             {MOUNT_MATERIALS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </div>
-      </div>
+        <Toggle label="Thermal Drift" paramKey="thermalDriftEnabled" />
+      </Section>
 
-      {/* Quantum */}
-      <div>
-        <h3 className="section-header" style={{ marginBottom: 20 }}>
-          <span className="section-dot" /> Quantum Effects
-        </h3>
-        <ToggleRow label="Shot Noise" paramKey="shotNoiseEnabled" />
+      {/* ===== NOISE / VIBRATION ===== */}
+      <Section title="Noise Sources" defaultOpen={false}>
+        <Toggle label="Phase Noise" paramKey="phaseNoiseEnabled" />
+        <Toggle label="Seismic Vibration" paramKey="seismicNoiseEnabled" />
+        <Toggle label="Shot Noise" paramKey="shotNoiseEnabled" />
+        <SliderControl label="Seismic Amp" unit="nm"
+          value={store.seismicAmplitude * 1e9} min={0} max={100} step={0.1}
+          onChange={(v) => setParam('seismicAmplitude', v * 1e-9)} formatValue={(v) => v.toFixed(1)} />
+        <SliderControl label="Seismic Freq" unit="Hz"
+          value={store.seismicFrequency} min={0.1} max={100} step={0.1}
+          onChange={(v) => setParam('seismicFrequency', v)} formatValue={(v) => v.toFixed(1)} />
+        <NumberRow label="Acoustic Noise" unit="μPa/√Hz" value={store.acousticNoiseDensity} paramKey="acousticNoiseDensity" convert={1e-6} precision={2} />
+      </Section>
+
+      {/* ===== DETECTOR ===== */}
+      <Section title="Detector" defaultOpen={false}>
+        <SliderControl label="QE (η)" unit="%"
+          value={store.detectorQE * 100} min={0} max={100} step={0.1}
+          onChange={(v) => setParam('detectorQE', v / 100)} formatValue={(v) => v.toFixed(1)} />
+        <NumberRow label="Dark Current" unit="e⁻/px/s" value={store.detectorDarkCurrent} paramKey="detectorDarkCurrent" precision={2} />
+        <NumberRow label="Read Noise" unit="e⁻ RMS" value={store.detectorReadNoise} paramKey="detectorReadNoise" precision={1} />
+        <NumberRow label="Pixel Pitch" unit="μm" value={store.detectorPixelPitch} paramKey="detectorPixelPitch" convert={1e-6} precision={1} />
+        <SliderControl label="Exposure" unit="ms"
+          value={store.detectorExposureTime * 1e3} min={0.1} max={1000} step={0.1}
+          onChange={(v) => setParam('detectorExposureTime', v * 1e-3)} formatValue={(v) => v.toFixed(1)} />
+        <div style={{ marginBottom: 8 }}>
+          <label className="label-nano" style={{ display: 'block', marginBottom: 6 }}>Array Size</label>
+          <select value={store.detectorArrayWidth} onChange={(e) => { setParam('detectorArrayWidth', parseInt(e.target.value)); setParam('detectorArrayHeight', parseInt(e.target.value)); }} style={{ width: '100%' }}>
+            <option value={64}>64×64</option>
+            <option value={128}>128×128</option>
+            <option value={256}>256×256</option>
+            <option value={512}>512×512</option>
+          </select>
+        </div>
+      </Section>
+
+      {/* ===== QUANTUM ===== */}
+      <Section title="Quantum Effects" defaultOpen={false}>
         <SliderControl label="Squeezing (r)" unit=""
           value={store.squeezingParam} min={0} max={3} step={0.01}
-          onChange={(v) => setParam('squeezingParam', v)}
-          formatValue={(v) => v.toFixed(2)} />
-      </div>
+          onChange={(v) => setParam('squeezingParam', v)} formatValue={(v) => v.toFixed(2)} />
+        <SliderControl label="Squeeze Angle" unit="°"
+          value={store.squeezingAngle * 180 / Math.PI} min={0} max={360} step={1}
+          onChange={(v) => setParam('squeezingAngle', v * Math.PI / 180)} formatValue={(v) => v.toFixed(0)} />
+      </Section>
 
-      {/* GW */}
-      <div>
-        <h3 className="section-header" style={{ marginBottom: 20 }}>
-          <span className="section-dot" /> Gravitational Waves
-        </h3>
-        <ToggleRow label="GW Injection" paramKey="gwEnabled" />
-        <SliderControl label="Strain h" unit=""
+      {/* ===== GRAVITATIONAL WAVES ===== */}
+      <Section title="Gravitational Waves" defaultOpen={false}>
+        <Toggle label="GW Injection" paramKey="gwEnabled" />
+        <SliderControl label="Strain h₀" unit=""
           value={Math.log10(store.gwStrain)} min={-25} max={-15} step={0.1}
-          onChange={(logH) => setParam('gwStrain', Math.pow(10, logH))}
-          formatValue={(v) => `10^${v.toFixed(1)}`} />
-        <SliderControl label="GW Freq" unit="Hz"
+          onChange={(v) => setParam('gwStrain', Math.pow(10, v))} formatValue={(v) => `10^${v.toFixed(1)}`} />
+        <SliderControl label="Frequency" unit="Hz"
           value={store.gwFrequency} min={10} max={5000} step={1}
-          onChange={(v) => setParam('gwFrequency', v)}
-          formatValue={(v) => v.toFixed(0)} />
-      </div>
-
-      {/* Emergency Shutoff */}
-      <button className="btn-danger">Emergency Shutoff</button>
+          onChange={(v) => setParam('gwFrequency', v)} formatValue={(v) => v.toFixed(0)} />
+        <div style={{ marginBottom: 8 }}>
+          <label className="label-nano" style={{ display: 'block', marginBottom: 6 }}>Polarization</label>
+          <select value={store.gwPolarization} onChange={(e) => setParam('gwPolarization', e.target.value)} style={{ width: '100%' }}>
+            <option value="plus">h+ (Plus)</option>
+            <option value="cross">h× (Cross)</option>
+          </select>
+        </div>
+      </Section>
     </>
   );
 };

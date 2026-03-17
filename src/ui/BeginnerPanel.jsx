@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
+import { generateFringePattern, wavelengthToColor } from '../physics/basicInterference.js';
 
 /** Reusable V3-styled slider row */
 const SliderControl = ({ label, unit, value, min, max, step, onChange, formatValue }) => {
@@ -16,65 +17,128 @@ const SliderControl = ({ label, unit, value, min, max, step, onChange, formatVal
   );
 };
 
+/**
+ * Beginner Panel — V3 unified_beginner_mode right sidebar
+ * Interferogram canvas (real fringes from basicInterference.js) + Simulation Analysis
+ */
 const BeginnerPanel = () => {
   const wavelength = useSimulationStore((s) => s.wavelength);
-  const armLengthX = useSimulationStore((s) => s.armLengthX);
-  const armLengthY = useSimulationStore((s) => s.armLengthY);
-  const mirrorTiltX = useSimulationStore((s) => s.mirrorTiltX);
-  const setParam = useSimulationStore((s) => s.setParam);
+  const mirror1PosX = useSimulationStore((s) => s.mirror1PosX);
+  const mirror2PosZ = useSimulationStore((s) => s.mirror2PosZ);
+  const mirror1Tip = useSimulationStore((s) => s.mirror1Tip);
+  const mirror2Tip = useSimulationStore((s) => s.mirror2Tip);
+  const canvasRef = useRef(null);
 
-  const opd = 2 * (armLengthX - armLengthY);
+  const armX = Math.sqrt(mirror1PosX ** 2);
+  const armY = Math.abs(mirror2PosZ);
+  const opd = 2 * (armX - armY);
+
+  // Render real fringe pattern from physics engine
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    const draw = () => {
+      const size = Math.min(canvas.offsetWidth, canvas.offsetHeight);
+      canvas.width = size * 2;
+      canvas.height = size * 2;
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Real physics: generate fringe data
+      const resolution = 128;
+      const fringeData = generateFringePattern({
+        wavelength,
+        opdCenter: opd,
+        tiltX: mirror1Tip,
+        tiltY: mirror2Tip,
+        resolution,
+        detectorSize: 0.01,
+      });
+
+      // Color from wavelength
+      const color = wavelengthToColor(wavelength);
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+
+      // Draw as circular clipped pattern
+      const radius = Math.min(cx, cy) * 0.85;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.clip();
+
+      const pixelSize = (radius * 2) / resolution;
+      for (let j = 0; j < resolution; j++) {
+        for (let i = 0; i < resolution; i++) {
+          const intensity = fringeData[j * resolution + i];
+          const alpha = intensity * 0.9 + 0.1;
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+          const px = cx - radius + i * pixelSize;
+          const py = cy - radius + j * pixelSize;
+          ctx.fillRect(px, py, pixelSize + 0.5, pixelSize + 0.5);
+        }
+      }
+
+      // Subtle ring guides
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 0.5;
+      for (let ri = 0.25; ri <= 1; ri += 0.25) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * ri, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Dashed border ring
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    draw();
+    const obs = new ResizeObserver(draw);
+    obs.observe(canvas);
+    return () => obs.disconnect();
+  }, [wavelength, opd, mirror1Tip, mirror2Tip]);
 
   return (
     <>
-      {/* Laser Source */}
+      {/* Interferogram */}
       <div>
-        <h3 className="section-header" style={{ marginBottom: 16 }}>
-          <span className="section-dot" /> Laser Engine λ
+        <h3 className="label-section" style={{ marginBottom: 16, letterSpacing: '0.2em' }}>
+          Interferogram
         </h3>
-        <SliderControl label="Wavelength" unit="nm"
-          value={wavelength * 1e9} min={380} max={780} step={0.1}
-          onChange={(nm) => setParam('wavelength', nm * 1e-9)}
-          formatValue={(v) => v.toFixed(1)} />
-        <p style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.5, fontStyle: 'italic', letterSpacing: '0.05em' }}>
-          Adjust subatomic source wavelength.
-        </p>
-      </div>
-
-      {/* Geometry */}
-      <div>
-        <h3 className="section-header" style={{ marginBottom: 16 }}>
-          <span className="section-dot" /> Geometry Offset
-        </h3>
-
-        <div className="number-input-row" style={{ marginBottom: 12 }}>
-          <div>
-            <p style={{ fontSize: 9, color: 'var(--text-slate)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-              Arm 1 (Static)
-            </p>
-            <span className="value-readout">{(armLengthX * 1e3).toFixed(3)} mm</span>
-          </div>
-        </div>
-
-        <div style={{ background: 'rgba(255,255,255,0.05)', padding: 16, borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)', marginBottom: 12 }}>
-          <p style={{ fontSize: 9, color: 'var(--text-slate)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-            Arm 2 (Piezo)
+        <div style={{
+          borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)',
+          border: '1px solid rgba(255,255,255,0.05)', padding: 16,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+        }}>
+          <canvas ref={canvasRef} style={{ width: '100%', aspectRatio: '1/1', maxWidth: 280, borderRadius: '50%' }} />
+          <p style={{
+            fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.35)',
+            letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: 16, textAlign: 'center',
+          }}>
+            Detector Output Stream
           </p>
-          <SliderControl label="Position" unit="mm"
-            value={armLengthY * 1e3} min={50} max={500} step={0.001}
-            onChange={(mm) => setParam('armLengthY', mm * 1e-3)}
-            formatValue={(v) => v.toFixed(3)} />
         </div>
-
-        <SliderControl label="Mirror Tilt" unit="mrad"
-          value={mirrorTiltX * 1e3} min={-5} max={5} step={0.01}
-          onChange={(mrad) => setParam('mirrorTiltX', mrad * 1e-3)}
-          formatValue={(v) => v.toFixed(2)} />
       </div>
 
-      {/* Physics Explanation */}
+      {/* Simulation Analysis */}
       <div>
-        <h3 className="label-section" style={{ marginBottom: 16 }}>Simulation Analysis</h3>
+        <h3 className="label-section" style={{ marginBottom: 16, letterSpacing: '0.2em' }}>
+          Simulation Analysis
+        </h3>
         <div style={{ fontSize: 12, lineHeight: 1.8, color: 'var(--text-mercury)' }}>
           <p style={{ marginBottom: 12, textAlign: 'justify', opacity: 0.8 }}>
             The coherent source beams recombine at the semi-reflective interface (BS-1), inducing
@@ -87,6 +151,9 @@ const BeginnerPanel = () => {
           }}>
             I = 2I₀(1 + cos(δ))
           </div>
+          <p style={{ marginBottom: 8, opacity: 0.7, fontSize: 11 }}>
+            The quantum phase <strong style={{ color: '#fff' }}>δ</strong> is a function of the optical path difference <strong style={{ color: '#fff' }}>ΔL</strong>:
+          </p>
           <div style={{
             fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.03)',
             padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)',
@@ -97,15 +164,21 @@ const BeginnerPanel = () => {
           <div style={{ fontSize: 10 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', marginTop: 4, flexShrink: 0 }} />
-              <p><span style={{ color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>Constructive:</span> Maximum intensity when Δd = nλ.</p>
+              <p><span style={{ color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>Constructive:</span> Maximum intensity when path differential is a multiple of λ.</p>
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.4)', marginTop: 4, flexShrink: 0 }} />
-              <p><span style={{ color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>Destructive:</span> Cancellation at Δd = (n+½)λ.</p>
+              <p><span style={{ color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>Destructive:</span> Phase cancellation at half-multiples of λ.</p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Recalibrate */}
+      <button className="btn-ghost" style={{ width: '100%', justifyContent: 'center', padding: '14px 0', marginTop: 'auto' }}
+        onClick={() => useSimulationStore.getState().resetToDefaults()}>
+        Recalibrate System
+      </button>
     </>
   );
 };

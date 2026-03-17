@@ -41,16 +41,15 @@ const loadWasmEngine = async () => {
  */
 export const computeFringePattern = (state, elapsed = 0) => {
   if (!state.isResearchMode) {
-    const opd = 2 * (
-      (state.armLengthX + state.mirrorTranslationX) -
-      (state.armLengthY + state.mirrorTranslationY)
-    );
+    const armX = Math.sqrt((state.mirror1PosX || 0) ** 2 + (state.mirror1PosZ || 0) ** 2);
+    const armY = Math.sqrt((state.mirror2PosX || 0) ** 2 + (state.mirror2PosZ || 0) ** 2);
+    const opd = 2 * (armX - armY);
     return generateFringePattern({
       wavelength: state.wavelength,
       opdCenter: opd,
-      tiltX: state.mirrorTiltX,
-      tiltY: state.mirrorTiltY,
-      resolution: state.detectorResolution,
+      tiltX: state.mirror1Tip || 0,
+      tiltY: state.mirror2Tip || 0,
+      resolution: state.detectorArrayWidth || 256,
       detectorSize: 0.01,
     });
   }

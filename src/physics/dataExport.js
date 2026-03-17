@@ -1,74 +1,63 @@
 /**
  * Data Export Module
- *
- * Provides export of detector data as:
- * - CSV (raw intensity grid)
- * - Simulated TIFF (as downloadable binary blob)
+ * Exports simulation data to CSV, PNG, and JSON using REAL physics values.
  */
 
-import { generateFringePattern } from './basicInterference.js';
-import { generateAdvancedFringePattern } from './advancedInterference.js';
+import { generateFringePattern, wavelengthToColor } from './basicInterference.js';
 
 /**
- * Generate the current fringe data from simulation state.
- * @param {Object} state - Zustand store state
- * @param {number} elapsed - Elapsed time
- * @returns {Float32Array}
- */
-const getCurrentFringeData = (state, elapsed = 0) => {
-  if (state.isResearchMode) {
-    return generateAdvancedFringePattern(state, elapsed);
-  }
-
-  const opd = 2 * ((state.armLengthX + state.mirrorTranslationX) -
-                    (state.armLengthY + state.mirrorTranslationY));
-  return generateFringePattern({
-    wavelength: state.wavelength,
-    opdCenter: opd,
-    tiltX: state.mirrorTiltX,
-    tiltY: state.mirrorTiltY,
-    resolution: state.detectorResolution,
-    detectorSize: 0.01,
-  });
-};
-
-/**
- * Export fringe data as a CSV file.
- * Each row = one detector row, columns = pixel values.
- *
- * @param {Object} state - Simulation state
+ * Export fringe data as CSV.
+ * @param {Object} state - Full simulation state from store
  */
 export const exportCSV = (state) => {
-  const N = state.detectorResolution;
-  const data = getCurrentFringeData(state);
+  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
+  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
+  const opd = 2 * (armX - armY);
 
-  let csv = '# Michelson Interferometer Simulab — Fringe Data Export\n';
-  csv += `# Wavelength: ${state.wavelength * 1e9} nm\n`;
-  csv += `# Resolution: ${N}x${N}\n`;
-  csv += `# Mode: ${state.isResearchMode ? 'Research' : 'Beginner'}\n`;
-  csv += `# OPD: ${(2 * ((state.armLengthX + state.mirrorTranslationX) - (state.armLengthY + state.mirrorTranslationY)) * 1e6).toFixed(4)} μm\n`;
-  csv += '#\n';
+  const data = generateFringePattern({
+    wavelength: state.wavelength,
+    opdCenter: opd,
+    tiltX: state.mirror1Tip,
+    tiltY: state.mirror2Tip,
+    resolution: state.detectorArrayWidth,
+  });
+
+  const N = state.detectorArrayWidth;
+  let csv = '# Michelson Interferometer Simulab — CSV Export\n';
+  csv += `# Wavelength: ${(state.wavelength * 1e9).toFixed(2)} nm\n`;
+  csv += `# Power: ${(state.laserPower * 1e3).toFixed(3)} mW\n`;
+  csv += `# OPD: ${(opd * 1e6).toFixed(4)} μm\n`;
+  csv += `# Arm X: ${(armX * 1e3).toFixed(3)} mm\n`;
+  csv += `# Arm Y: ${(armY * 1e3).toFixed(3)} mm\n`;
+  csv += `# Detector: ${N}x${N} pixels\n`;
+  csv += 'x,y,intensity\n';
 
   for (let j = 0; j < N; j++) {
-    const row = [];
     for (let i = 0; i < N; i++) {
-      row.push(data[j * N + i].toFixed(6));
+      csv += `${i},${j},${data[j * N + i].toFixed(6)}\n`;
     }
-    csv += row.join(',') + '\n';
   }
 
-  downloadBlob(csv, 'interferometer_fringes.csv', 'text/csv');
+  downloadFile(csv, 'interferogram_data.csv', 'text/csv');
 };
 
 /**
- * Export fringe data as a simulated TIFF-like image.
- * Actually exports a PNG (universally readable) from a canvas.
- *
- * @param {Object} state - Simulation state
+ * Export fringe pattern as PNG image.
+ * @param {Object} state - Full simulation state from store
  */
 export const exportImage = (state) => {
-  const N = state.detectorResolution;
-  const data = getCurrentFringeData(state);
+  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
+  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
+  const opd = 2 * (armX - armY);
+  const N = state.detectorArrayWidth;
+
+  const data = generateFringePattern({
+    wavelength: state.wavelength,
+    opdCenter: opd,
+    tiltX: state.mirror1Tip,
+    tiltY: state.mirror2Tip,
+    resolution: N,
+  });
 
   const canvas = document.createElement('canvas');
   canvas.width = N;
@@ -76,78 +65,110 @@ export const exportImage = (state) => {
   const ctx = canvas.getContext('2d');
   const imageData = ctx.createImageData(N, N);
 
-  for (let i = 0; i < N * N; i++) {
-    const val = Math.round(Math.max(0, Math.min(1, data[i])) * 255);
-    imageData.data[i * 4] = val;
-    imageData.data[i * 4 + 1] = val;
-    imageData.data[i * 4 + 2] = val;
+  const color = wavelengthToColor(state.wavelength);
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+
+  for (let i = 0; i < data.length; i++) {
+    const val = Math.max(0, Math.min(1, data[i]));
+    imageData.data[i * 4]     = Math.round(r * val);
+    imageData.data[i * 4 + 1] = Math.round(g * val);
+    imageData.data[i * 4 + 2] = Math.round(b * val);
     imageData.data[i * 4 + 3] = 255;
   }
-
   ctx.putImageData(imageData, 0, 0);
 
   canvas.toBlob((blob) => {
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'interferometer_fringes.png';
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'interferogram.png';
+    a.click();
+    URL.revokeObjectURL(url);
   }, 'image/png');
 };
 
 /**
- * Export full simulation parameters as JSON.
- *
- * @param {Object} state - Simulation state
+ * Export full simulation state as JSON.
+ * @param {Object} state - Full simulation state from store
  */
 export const exportJSON = (state) => {
+  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
+  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
+
   const exportData = {
-    metadata: {
-      application: 'Michelson Interferometer Simulab',
-      exportDate: new Date().toISOString(),
-      mode: state.isResearchMode ? 'Research' : 'Beginner',
+    meta: {
+      format: 'Simulab_v4.2_JSON',
+      timestamp: new Date().toISOString(),
+      engine: 'stochastic_v18.4.3',
     },
-    parameters: {
+    source: {
       wavelength_m: state.wavelength,
-      armLengthX_m: state.armLengthX,
-      armLengthY_m: state.armLengthY,
-      mirrorTranslationX_m: state.mirrorTranslationX,
-      mirrorTranslationY_m: state.mirrorTranslationY,
-      mirrorTiltX_rad: state.mirrorTiltX,
-      mirrorTiltY_rad: state.mirrorTiltY,
-      laserLinewidth_Hz: state.laserLinewidth,
-      laserPower_W: state.laserPower,
+      power_W: state.laserPower,
+      linewidth_Hz: state.laserLinewidth,
       beamWaist_m: state.beamWaist,
-      temperature_K: state.temperature,
-      mountMaterial: state.mountMaterial,
-      squeezingParam: state.squeezingParam,
-      detectorResolution: state.detectorResolution,
-      quantumEfficiency: state.quantumEfficiency,
-      darkCurrent: state.darkCurrent,
+      polarization: state.polarizationInput,
     },
-    noiseConfig: {
-      phaseNoise: state.phaseNoiseEnabled,
-      seismicNoise: state.seismicNoiseEnabled,
-      thermalDrift: state.thermalDriftEnabled,
-      shotNoise: state.shotNoiseEnabled,
+    mirror1: {
+      position_m: [state.mirror1PosX, state.mirror1PosY, state.mirror1PosZ],
+      tip_rad: state.mirror1Tip,
+      tilt_rad: state.mirror1Tilt,
+      reflectivity: state.mirror1Reflectivity,
+      mass_kg: state.mirror1Mass,
+      CTE_perK: state.mirror1CTE,
+    },
+    mirror2: {
+      position_m: [state.mirror2PosX, state.mirror2PosY, state.mirror2PosZ],
+      tip_rad: state.mirror2Tip,
+      tilt_rad: state.mirror2Tilt,
+      reflectivity: state.mirror2Reflectivity,
+      mass_kg: state.mirror2Mass,
+      CTE_perK: state.mirror2CTE,
+    },
+    beamSplitter: {
+      reflectivity: state.bsReflectivity,
+      thickness_m: state.bsThickness,
+      refractiveIndex: state.bsRefractiveIndex,
+      wedgeAngle_rad: state.bsWedgeAngle,
+    },
+    environment: {
+      temperature_K: state.envTemperature,
+      pressure_Pa: state.envPressure,
+      humidity: state.envHumidity,
+      refractiveIndex: state.envRefractiveIndex,
+    },
+    detector: {
+      quantumEfficiency: state.detectorQE,
+      darkCurrent_ePxS: state.detectorDarkCurrent,
+      readNoise_eRMS: state.detectorReadNoise,
+      pixelPitch_m: state.detectorPixelPitch,
+      arraySize: [state.detectorArrayWidth, state.detectorArrayHeight],
+      exposureTime_s: state.detectorExposureTime,
+    },
+    derived: {
+      armLengthX_m: armX,
+      armLengthY_m: armY,
+      opticalPathDifference_m: 2 * (armX - armY),
+    },
+    quantum: {
+      squeezingParam: state.squeezingParam,
+      squeezingAngle_rad: state.squeezingAngle,
+      shotNoiseEnabled: state.shotNoiseEnabled,
     },
     gravitationalWave: {
       enabled: state.gwEnabled,
       strain: state.gwStrain,
       frequency_Hz: state.gwFrequency,
-      armLengthMultiplier: state.armLengthMultiplier,
+      polarization: state.gwPolarization,
     },
   };
 
-  const json = JSON.stringify(exportData, null, 2);
-  downloadBlob(json, 'interferometer_config.json', 'application/json');
+  downloadFile(JSON.stringify(exportData, null, 2), 'simulation_state.json', 'application/json');
 };
 
-/** Helper: download a string/blob as a file */
-const downloadBlob = (content, filename, mimeType) => {
+/** Helper to trigger file download */
+const downloadFile = (content, filename, mimeType) => {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

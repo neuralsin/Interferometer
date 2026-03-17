@@ -203,7 +203,27 @@ const SceneManager = () => {
       orbitControls.update();
 
       const state = useSimulationStore.getState();
+
+      // Skip rendering if paused
+      if (state.simulationPaused) {
+        composer.render();
+        return;
+      }
+
       const color = wavelengthToColor(state.wavelength);
+
+      // Sync mirror positions from store
+      mirrorX.position.set(state.mirror1PosX, state.mirror1PosY, state.mirror1PosZ);
+      mirrorX.rotation.x = state.mirror1Tip;
+      mirrorX.rotation.z = state.mirror1Tilt;
+
+      mirrorY.position.set(state.mirror2PosX, state.mirror2PosY, state.mirror2PosZ);
+      mirrorY.rotation.y = Math.PI / 2;
+      mirrorY.rotation.x = state.mirror2Tip;
+      mirrorY.rotation.z = state.mirror2Tilt;
+
+      // Toggle compensator visibility
+      compensator.visible = state.compensatorEnabled;
 
       // Update volumetric beam shaders
       beams.traverse((child) => {

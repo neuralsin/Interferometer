@@ -1,182 +1,338 @@
-import React from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
 import { photonCount, shotNoiseLimit, squeezedSensitivity, phaseSNR } from '../physics/quantumModel.js';
 import { SliderControl } from './BeginnerPanel.jsx';
 
 /**
- * Quantum Panel — maps to:
- *   subatomic_quantum_configuration (V3 reference)
- *
- * Surfaces backend engines:
- *   - quantumModel.js (photon count, SQL, squeezed sensitivity, SNR)
- *   - polarization.js (Jones vector type)
- *   - detectorModel.js (QE readout)
+ * Quantum Panel — SUBATOMIC tab
+ * Real-time graphs driven by quantumModel.js
+ * All values update instantly when store parameters change.
  */
 const QuantumPanel = () => {
   const state = useSimulationStore();
   const { setParam } = state;
 
   // Live backend calculations
-  const N = photonCount(state.laserPower, state.wavelength, 0.001);
+  const N = photonCount(state.laserPower, state.wavelength, state.detectorExposureTime);
   const sql = shotNoiseLimit(N);
   const sqzSens = squeezedSensitivity(N, state.squeezingParam);
-  const opd = 2 * ((state.armLengthX + state.mirrorTranslationX) - (state.armLengthY + state.mirrorTranslationY));
-  const snr = phaseSNR(Math.abs(opd * 2 * Math.PI / state.wavelength), N, state.squeezingParam);
+  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
+  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
+  const opd = 2 * (armX - armY);
+  const phase = Math.abs(opd * 2 * Math.PI / state.wavelength);
+  const snr = phaseSNR(phase, N, state.squeezingParam);
+  const snrDB = snr > 1e-10 ? 10 * Math.log10(snr) : 0;
+  const heisenbergLimit = 1 / N;
+  const photonFlux = (state.laserPower * state.wavelength) / (6.626e-34 * 3e8);
+
+  // Compute squeeze ellipse data for live graph
+  const squeezeCurve = useMemo(() => {
+    const points = [];
+    const r = state.squeezingParam;
+    const theta = state.squeezingAngle;
+    for (let t = 0; t <= 2 * Math.PI; t += 0.05) {
+      const x0 = Math.exp(-r) * Math.cos(t);
+      const y0 = Math.exp(r) * Math.sin(t);
+      const x = x0 * Math.cos(theta) - y0 * Math.sin(theta);
+      const y = x0 * Math.sin(theta) + y0 * Math.cos(theta);
+      points.push({ x, y });
+    }
+    return points;
+  }, [state.squeezingParam, state.squeezingAngle]);
+
+  // Compute sensitivity vs squeezing curve
+  const sensitivityCurve = useMemo(() => {
+    const pts = [];
+    for (let r = 0; r <= 3; r += 0.05) {
+      pts.push({
+        r,
+        sql: 1 / Math.sqrt(N),
+        sqz: Math.exp(-r) / Math.sqrt(N),
+        heisenberg: 1 / N,
+      });
+    }
+    return pts;
+  }, [N]);
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: 32 }}>
-      {/* Dashboard Header */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }} className="silver-gradient-text">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--text-silver-200)', boxShadow: '0 0 12px rgba(226,232,240,0.6)' }} />
-              Subatomic Quantum Panel
-              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-silver-400)', opacity: 0.5, marginLeft: 8 }}>v.Ω-9</span>
-            </span>
-          </h1>
-          <p style={{ color: 'var(--text-slate)', fontSize: 14, marginTop: 4, fontWeight: 500 }}>
-            Unified Interface for Non-Classical Light & Vacuum Fluctuations
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#fff', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            Subatomic Configuration
+          </h2>
+          <p style={{ fontSize: 10, color: 'var(--text-mercury)', opacity: 0.5, letterSpacing: '0.1em', marginTop: 4 }}>
+            Quantum noise limits • Squeezed states • Detection statistics
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button className="btn-ghost" onClick={() => useSimulationStore.getState().resetToDefaults()}>System Reset</button>
-          <button className="btn-primary">Initiate Sequence</button>
+        <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.4 }}>
+          N_photon: {N.toExponential(2)}
         </div>
       </header>
 
-      {/* Main Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 32, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        {/* LEFT COLUMN: Wigner/Phase Space + Controls */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Phase Space (Squeeze Ellipse) — LIVE UPDATING CANVAS */}
+          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 20 }}>
+            <h3 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>
+              Wigner Phase Space
+            </h3>
+            <PhaseSpaceCanvas squeezeCurve={squeezeCurve} r={state.squeezingParam} theta={state.squeezingAngle} />
+          </section>
 
-        {/* Squeezed Vacuum States */}
-        <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 24, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 32 }}>
-            <h2 style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--text-silver-400)' }}>Squeezed Vacuum States</h2>
-            <span style={{ fontSize: 9, padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '1px solid rgba(255,255,255,0.2)', color: 'var(--text-silver-300)', fontFamily: 'var(--font-mono)' }}>STABLE_COHERENCE</span>
+          {/* Squeezing Controls */}
+          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 20 }}>
+            <h3 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>
+              Squeeze State Control
+            </h3>
+            <SliderControl label="Squeezing (dB)" unit="dB"
+              value={state.squeezingParam * 2 * 4.343} min={0} max={26} step={0.1}
+              onChange={(dB) => setParam('squeezingParam', dB / (2 * 4.343))}
+              formatValue={(v) => v.toFixed(1)} />
+            <SliderControl label="Angle (θ)" unit="°"
+              value={state.squeezingAngle * 180 / Math.PI} min={0} max={360} step={1}
+              onChange={(deg) => setParam('squeezingAngle', deg * Math.PI / 180)}
+              formatValue={(v) => v.toFixed(0)} />
+          </section>
+        </div>
+
+        {/* RIGHT COLUMN: Sensitivity Curve + Metrics */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Sensitivity vs Squeezing — LIVE UPDATING GRAPH */}
+          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 20 }}>
+            <h3 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>
+              Phase Sensitivity vs Squeezing
+            </h3>
+            <SensitivityCanvas data={sensitivityCurve} currentR={state.squeezingParam} />
+          </section>
+
+          {/* Live Metrics Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <MetricBox label="Shot Noise Limit" value={sql.toExponential(2)} unit="rad" />
+            <MetricBox label="Squeezed Limit" value={sqzSens.toExponential(2)} unit="rad" />
+            <MetricBox label="Heisenberg Limit" value={heisenbergLimit.toExponential(2)} unit="rad" />
+            <MetricBox label="SNR" value={snrDB.toFixed(1)} unit="dB" />
+            <MetricBox label="QE (η)" value={`${(state.detectorQE * 100).toFixed(1)}%`} unit="" />
+            <MetricBox label="Photon Flux" value={photonFlux.toExponential(2)} unit="/s" />
+            <MetricBox label="Dark Current" value={state.detectorDarkCurrent.toFixed(2)} unit="e⁻/px/s" />
+            <MetricBox label="Read Noise" value={state.detectorReadNoise.toFixed(1)} unit="e⁻ RMS" />
           </div>
-
-          {/* 3D-ish Squeezed Ellipse */}
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32, perspective: '1000px' }}>
-            <div style={{ position: 'relative', width: 192, height: 192, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: 'rotateX(20deg) rotateY(-20deg)', transition: 'transform 500ms ease' }}>
-              <div style={{ position: 'absolute', inset: 0, border: '1px solid rgba(255,255,255,0.1)', borderRadius: '50%' }} />
-              <div style={{ position: 'absolute', inset: 16, border: '1px solid rgba(255,255,255,0.05)', borderRadius: '50%' }} />
-              <div style={{
-                width: 160, height: 40,
-                border: '2px solid var(--text-silver-200)',
-                background: 'rgba(226,232,240,0.1)',
-                borderRadius: '50%',
-                filter: 'blur(1px)',
-                boxShadow: '0 0 25px rgba(226,232,240,0.2)',
-                transform: `rotate(${state.polarizerAngle * 180 / Math.PI}deg) scaleY(${Math.max(0.2, 1 - state.squeezingParam * 0.3)})`,
-                transition: 'all 300ms ease',
-              }} />
-              <div style={{ position: 'absolute', width: '100%', height: 1, background: 'rgba(255,255,255,0.1)' }} />
-              <div style={{ position: 'absolute', height: '100%', width: 1, background: 'rgba(255,255,255,0.1)' }} />
-              <div style={{ position: 'absolute', top: 0, right: 0, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-slate)' }}>
-                Re[α]<br />Im[α]
-              </div>
-            </div>
-          </div>
-
-          <SliderControl label="Squeezing Factor (r)" unit="ζ"
-            value={state.squeezingParam} min={0} max={3} step={0.01}
-            onChange={(v) => setParam('squeezingParam', v)}
-            formatValue={(v) => (v * 2).toFixed(2)} />
-          <SliderControl label="Angle (θ)" unit="°"
-            value={state.polarizerAngle * 180 / Math.PI} min={0} max={360} step={1}
-            onChange={(deg) => setParam('polarizerAngle', deg * Math.PI / 180)}
-            formatValue={(v) => v.toFixed(1)} />
-        </section>
-
-        {/* Shot Noise Fluctuations */}
-        <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24 }}>
-            <h2 style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--text-silver-400)' }}>Shot Noise Fluctuations</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ height: 4, width: 48, background: 'linear-gradient(to right, transparent, var(--text-silver-400), transparent)', opacity: 0.3 }} />
-              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-slate)' }}>REALTIME_TELEMETRY</span>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 32 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              {/* Noise wave graph */}
-              <div style={{ height: 180, background: 'rgba(0,0,0,0.4)', borderRadius: 'var(--radius-high)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg viewBox="0 0 400 100" style={{ width: '100%', height: '100%', padding: 16 }}>
-                  <path d="M0,50 Q10,40 20,55 T40,45 T60,60 T80,42 T100,52 T120,48 T140,57 T160,40 T180,50 T200,45 T220,55 T240,42 T260,52 T280,48 T300,57 T320,40 T340,50 T360,45 T380,55 T400,50"
-                    fill="none" stroke="rgba(226,232,240,0.4)" strokeWidth="1.5" />
-                  <path d="M0,50 L400,50" stroke="rgba(255,255,255,0.05)" strokeDasharray="4" />
-                </svg>
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)', pointerEvents: 'none' }} />
-                <div style={{ position: 'absolute', bottom: 16, left: 24, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-silver-400)' }}>
-                  Δf = {(state.laserLinewidth * 1e-9).toFixed(1)} GHz
-                </div>
-                <div style={{ position: 'absolute', bottom: 16, right: 24, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-silver-400)' }}>
-                  SQL = {sql.toExponential(2)} rad
-                </div>
-              </div>
-
-              {/* QE + Photon Flux cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <div style={{ padding: 16, background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--radius-high)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-slate)', display: 'block', marginBottom: 12, letterSpacing: '0.15em', textTransform: 'uppercase' }}>Quantum Efficiency (η)</label>
-                  <span style={{ fontSize: 20, fontFamily: 'var(--font-mono)', color: 'var(--text-silver-200)' }}>{(state.quantumEfficiency * 100).toFixed(1)}%</span>
-                </div>
-                <div style={{ padding: 16, background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--radius-high)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-slate)', display: 'block', marginBottom: 12, letterSpacing: '0.15em', textTransform: 'uppercase' }}>Photon Flux (Φ)</label>
-                  <span style={{ fontSize: 20, fontFamily: 'var(--font-mono)', color: 'var(--text-silver-200)' }}>
-                    {N.toExponential(1)} <span style={{ fontSize: 10, opacity: 0.5 }}>s⁻¹</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Flux tuning bar + sync */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="glass-card" style={{ flex: 1, borderRadius: 'var(--radius-high)', padding: 16, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <label style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-slate)', marginBottom: 16, letterSpacing: '0.15em', textTransform: 'uppercase', display: 'block' }}>
-                  Squeezed Sensitivity
-                </label>
-                <div style={{ fontSize: 18, fontFamily: 'var(--font-mono)', color: '#fff', marginBottom: 8 }}>
-                  {sqzSens.toExponential(2)}
-                </div>
-                <div style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.6 }}>
-                  rad (shot noise limited)
-                </div>
-                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-silver-200)', marginTop: 16 }}>
-                  SNR: {snr.toFixed(1)}
-                </div>
-              </div>
-              <button className="btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>
-                Sync Matrix
-              </button>
-            </div>
-          </div>
-        </section>
+        </div>
       </div>
 
-      {/* Subatomic Metrics Bottom Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
-        <MetricTile accent label="Planck Interval" value="5.39e-44 s" />
-        <MetricTile label="Field Topology" value="NON-EUCLIDEAN" />
-        <MetricTile label="Bose-Einstein Cond." value="12.4 nK" />
-        <MetricTile highlight label="State Purity" value={`${(1 - sqzSens).toFixed(4)}`} pulse />
-      </div>
+      {/* EXPLANATION SECTION */}
+      <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 20, marginTop: 24 }}>
+        <h3 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 12 }}>
+          Physics Reference
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, fontSize: 11, color: 'var(--text-mercury)' }}>
+          <FormulaCard title="Photon Count" formula="N = P·λ·t / (h·c)" desc="Detector-collected photon statistics from source parameters." />
+          <FormulaCard title="Shot Noise" formula="Δφ_SQL = 1/√N" desc="Standard quantum limit — minimum detectable phase for coherent light." />
+          <FormulaCard title="Squeezed State" formula="Δφ_sqz = e^(-r)/√N" desc="Below-SQL sensitivity via squeezed vacuum injection at parameter r." />
+        </div>
+      </section>
     </div>
   );
 };
 
-const MetricTile = ({ label, value, accent, highlight, pulse }) => (
+/** Phase Space Canvas — draws squeeze ellipse in real-time */
+const PhaseSpaceCanvas = ({ squeezeCurve, r, theta }) => {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const size = canvas.offsetWidth;
+    canvas.width = size * 2;
+    canvas.height = size * 2;
+    const w = canvas.width, h = canvas.height;
+    const cx = w / 2, cy = h / 2;
+    const scale = w / 5;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo(cx + i * scale, 0); ctx.lineTo(cx + i * scale, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, cy + i * scale); ctx.lineTo(w, cy + i * scale); ctx.stroke();
+    }
+
+    // Axes
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = `${Math.max(16, w / 20)}px monospace`;
+    ctx.fillText('X₁', w - 30, cy - 8);
+    ctx.fillText('X₂', cx + 8, 24);
+
+    // Vacuum circle (r=0 reference)
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, scale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Squeeze ellipse
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(255,255,255,0.3)';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    squeezeCurve.forEach((p, i) => {
+      const px = cx + p.x * scale;
+      const py = cy - p.y * scale;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.stroke();
+
+    // Fill with slight glow
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }, [squeezeCurve, r, theta]);
+
+  return <canvas ref={canvasRef} style={{ width: '100%', aspectRatio: '1/1', borderRadius: 'var(--radius-md)' }} />;
+};
+
+/** Sensitivity Canvas — plots Δφ vs r with live cursor */
+const SensitivityCanvas = ({ data, currentR }) => {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.offsetWidth * 2;
+    const h = 300;
+    canvas.width = w;
+    canvas.height = h;
+
+    const pad = { l: 60, r: 20, t: 20, b: 40 };
+    const pw = w - pad.l - pad.r;
+    const ph = h - pad.t - pad.b;
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (data.length === 0) return;
+
+    // Determine Y range (log scale)
+    const allVals = data.flatMap(d => [d.sql, d.sqz, d.heisenberg]).filter(v => v > 0);
+    const yMin = Math.log10(Math.min(...allVals)) - 0.5;
+    const yMax = Math.log10(Math.max(...allVals)) + 0.5;
+    const xMax = data[data.length - 1].r;
+
+    const toX = (r) => pad.l + (r / xMax) * pw;
+    const toY = (v) => {
+      const logV = Math.log10(Math.max(1e-30, v));
+      return pad.t + ph - ((logV - yMin) / (yMax - yMin)) * ph;
+    };
+
+    // Y axis grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = `${Math.max(14, w / 40)}px monospace`;
+    ctx.lineWidth = 1;
+    for (let e = Math.ceil(yMin); e <= Math.floor(yMax); e++) {
+      const y = toY(Math.pow(10, e));
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+      ctx.fillText(`10^${e}`, 4, y + 4);
+    }
+
+    // X axis label
+    ctx.fillText('Squeezing (r)', pad.l + pw / 2 - 30, h - 5);
+
+    // SQL line (dashed)
+    ctx.strokeStyle = 'rgba(255,200,100,0.4)';
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    data.forEach((d, i) => {
+      const x = toX(d.r), y = toY(d.sql);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Heisenberg line (dashed, faint)
+    ctx.strokeStyle = 'rgba(100,200,255,0.3)';
+    ctx.beginPath();
+    data.forEach((d, i) => {
+      const x = toX(d.r), y = toY(d.heisenberg);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Squeezed sensitivity curve (solid white)
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = 'rgba(255,255,255,0.3)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    data.forEach((d, i) => {
+      const x = toX(d.r), y = toY(d.sqz);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Current position marker
+    const curIdx = data.findIndex(d => d.r >= currentR);
+    if (curIdx >= 0) {
+      const d = data[curIdx];
+      const x = toX(d.r);
+      const y = toY(d.sqz);
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, pad.t);
+      ctx.lineTo(x, h - pad.b);
+      ctx.stroke();
+    }
+
+    // Legend
+    ctx.font = `${Math.max(12, w / 50)}px monospace`;
+    ctx.fillStyle = 'rgba(255,200,100,0.6)'; ctx.fillText('— SQL', w - pad.r - 80, pad.t + 15);
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText('— Squeezed', w - pad.r - 80, pad.t + 30);
+    ctx.fillStyle = 'rgba(100,200,255,0.5)'; ctx.fillText('— Heisenberg', w - pad.r - 80, pad.t + 45);
+  }, [data, currentR]);
+
+  return <canvas ref={canvasRef} style={{ width: '100%', height: 150, borderRadius: 'var(--radius-md)' }} />;
+};
+
+const MetricBox = ({ label, value, unit }) => (
   <div className="glass-card" style={{
-    borderRadius: 'var(--radius-high)', padding: 20,
-    borderLeft: accent ? '4px solid var(--text-silver-300)' : 'none',
-    background: highlight ? 'rgba(226,232,240,0.05)' : undefined,
+    borderRadius: 'var(--radius-md)', padding: 14, display: 'flex', flexDirection: 'column', gap: 6,
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
   }}>
-    <div style={{ fontSize: 10, color: 'var(--text-slate)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 4 }}>{label}</div>
-    <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', color: 'var(--text-silver-200)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <span>{value}</span>
-      {pulse && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text-silver-200)', animation: 'ping 1.5s infinite' }} />}
-    </div>
+    <span style={{ fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-slate)' }}>
+      {label}
+    </span>
+    <span style={{ fontSize: 16, fontFamily: 'var(--font-mono)', color: '#fff' }}>
+      {value} <span style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.5 }}>{unit}</span>
+    </span>
+  </div>
+);
+
+const FormulaCard = ({ title, formula, desc }) => (
+  <div style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)' }}>
+    <p style={{ fontSize: 9, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>{title}</p>
+    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fff', marginBottom: 6 }}>{formula}</p>
+    <p style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.6, lineHeight: 1.4 }}>{desc}</p>
   </div>
 );
 

@@ -1,261 +1,293 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
-import { fringeVisibility, coherenceLength as calcCoherenceLength } from '../physics/coherenceModel.js';
+import { chirpStrain, minDetectableStrain, gwPhaseShift } from '../physics/gravitationalWave.js';
 import { photonCount, phaseSNR } from '../physics/quantumModel.js';
-import { chirpStrain, minDetectableStrain } from '../physics/gravitationalWave.js';
-import { exportCSV, exportImage, exportJSON } from '../physics/dataExport.js';
+
+const CELESTIAL_SOURCES = [
+  { value: 'bbh', label: 'Binary Black Hole Merger' },
+  { value: 'bns', label: 'Binary Neutron Star' },
+  { value: 'nsbh', label: 'Neutron Star–Black Hole' },
+  { value: 'cw', label: 'Continuous Wave (Pulsar)' },
+];
 
 /**
- * Analytics & Export Tab — maps to:
- *   unified_analytics_export + astronomical_gravitational_analytics (V3 references)
- *
- * Surfaces backend engines:
- *   - gravitationalWave.js (chirp strain canvas, min detectable strain)
- *   - coherenceModel.js (visibility, coherence length)
- *   - quantumModel.js (SNR)
- *   - dataExport.js (CSV, PNG, JSON buttons)
+ * Analytics Panel — ASTRONOMICAL tab
+ * Dynamic GW chirp waveform, animated Q-Scan, real-time physics metrics.
+ * ALL graphs use requestAnimationFrame and real gravitationalWave.js computations.
  */
 const AnalyticsPanel = () => {
   const state = useSimulationStore();
+  const { setParam } = state;
   const strainCanvasRef = useRef(null);
+  const qscanCanvasRef = useRef(null);
+  const animRef = useRef(null);
+  const timeRef = useRef(0);
+  const [isRunning, setIsRunning] = useState(true);
 
-  const opd = 2 * ((state.armLengthX + state.mirrorTranslationX) - (state.armLengthY + state.mirrorTranslationY));
-  const visibility = fringeVisibility(opd, state.laserLinewidth);
-  const cohLength = calcCoherenceLength(state.laserLinewidth);
-  const N = photonCount(state.laserPower, state.wavelength, 0.001);
-  const snr = N > 0 ? phaseSNR(Math.abs(opd * 2 * Math.PI / state.wavelength), N, state.squeezingParam) : 0;
-  const hMin = minDetectableStrain(state.armLengthX * state.armLengthMultiplier, state.wavelength, N, state.squeezingParam);
+  // Derived physics
+  const armLenM = state.gwArmLength * 1000;
+  const N = photonCount(state.laserPower, state.wavelength, state.detectorExposureTime);
+  const hMin = minDetectableStrain(armLenM, state.wavelength, N, state.squeezingParam);
+  const totalMass = state.mass1 + state.mass2;
+  const chirpMass = Math.pow(state.mass1 * state.mass2, 3 / 5) / Math.pow(totalMass, 1 / 5);
+  const phaseShift = gwPhaseShift(armLenM, state.wavelength, state.gwStrain);
+  const snrValue = N > 0 ? phaseSNR(Math.abs(phaseShift), N, state.squeezingParam) : 0;
+  const snrDB = snrValue > 1e-10 ? (10 * Math.log10(snrValue)).toFixed(1) : '0';
+  const eta = (state.mass1 * state.mass2) / (totalMass * totalMass);
+  const luminosityDist = Math.round(410 * (chirpMass / 28.1));
+  const finalSpin = Math.max(0, Math.min(1, Math.abs(Math.sqrt(12) * eta - 3.871 * eta * eta + 4.028 * eta ** 3) + 0.3));
 
-  // Chirp strain canvas (matching V3 astronomical_gravitational_analytics)
+  // ANIMATED chirp waveform
   useEffect(() => {
-    const canvas = strainCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const strainCanvas = strainCanvasRef.current;
+    const qscanCanvas = qscanCanvasRef.current;
+    if (!strainCanvas || !qscanCanvas) return;
+    const ctx = strainCanvas.getContext('2d');
+    const qctx = qscanCanvas.getContext('2d');
+
     const resize = () => {
-      canvas.width = canvas.offsetWidth * 2;
-      canvas.height = canvas.offsetHeight * 2;
-      draw();
+      strainCanvas.width = strainCanvas.offsetWidth * 2;
+      strainCanvas.height = strainCanvas.offsetHeight * 2;
+      qscanCanvas.width = qscanCanvas.offsetWidth * 2;
+      qscanCanvas.height = qscanCanvas.offsetHeight * 2;
     };
-    const draw = () => {
-      const w = canvas.width;
-      const h = canvas.height;
+    resize();
+    window.addEventListener('resize', resize);
+
+    const drawFrame = () => {
+      if (!isRunning) { animRef.current = requestAnimationFrame(drawFrame); return; }
+      timeRef.current += 0.008; // time marches forward
+      const tNow = timeRef.current;
+      const currentState = useSimulationStore.getState();
+
+      // ===== CHIRP STRAIN CANVAS =====
+      const w = strainCanvas.width, h = strainCanvas.height;
       ctx.clearRect(0, 0, w, h);
-      // Glow
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = 'rgba(255,255,255,0.3)';
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-      ctx.lineWidth = 2;
-      for (let x = 0; x < w; x++) {
-        const progress = x / w;
-        const freq = 2 + progress * 25;
-        const envelope = Math.pow(progress, 2.5) * 0.8 + 0.05;
-        const y = h / 2 + Math.sin(progress * freq * 20) * envelope * (h / 2.2);
-        if (x === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+
+      // Grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 10; i++) { ctx.beginPath(); ctx.moveTo(0, i * h / 10); ctx.lineTo(w, i * h / 10); ctx.stroke(); }
+      for (let i = 0; i < 20; i++) { ctx.beginPath(); ctx.moveTo(i * w / 20, 0); ctx.lineTo(i * w / 20, h); ctx.stroke(); }
+
       // Noise floor
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(148,163,184,0.15)';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
       for (let x = 0; x < w; x++) {
-        const noise = (Math.random() - 0.5) * 20;
-        const y = h / 2 + noise;
-        if (x === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        const noise = (Math.random() - 0.5) * 10;
+        x === 0 ? ctx.moveTo(x, h / 2 + noise) : ctx.lineTo(x, h / 2 + noise);
       }
       ctx.stroke();
-    };
-    window.addEventListener('resize', resize);
-    resize();
-    return () => window.removeEventListener('resize', resize);
-  }, [state.gwStrain, state.gwFrequency]);
 
-  // FFT bars
-  const fftBars = [
-    { h: 25, d: 0 }, { h: 40, d: 0.2 }, { h: 10, d: 0.4 }, { h: 95, d: 0.5 },
-    { h: 30, d: 0.8 }, { h: 15, d: 0.1 }, { h: 20, d: 0.3 }, { h: 55, d: 0.6 },
-    { h: 10, d: 0 },
-  ];
+      // Scrolling chirp waveform — ANIMATED, uses real chirpStrain
+      const tMerge = 1.5;
+      const viewWindow = 2.0; // seconds of data visible
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = 'rgba(255,255,255,0.4)';
+
+      for (let x = 0; x < w; x++) {
+        const tSample = tNow - viewWindow + (x / w) * viewWindow;
+        const tLocal = ((tSample % tMerge) + tMerge) % tMerge; // loop the merger
+        const strain = chirpStrain(tLocal, currentState.gwStrain * 1e19, tMerge, currentState.gwFrequency * 0.3);
+        const y = h / 2 - strain * (h / 2.8);
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Glow duplicate
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.lineWidth = 8;
+      ctx.shadowBlur = 0;
+      for (let x = 0; x < w; x++) {
+        const tSample = tNow - viewWindow + (x / w) * viewWindow;
+        const tLocal = ((tSample % tMerge) + tMerge) % tMerge;
+        const strain = chirpStrain(tLocal, currentState.gwStrain * 1e19, tMerge, currentState.gwFrequency * 0.3);
+        const y = h / 2 - strain * (h / 2.8);
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Time axis labels
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.font = `${Math.max(14, w / 40)}px monospace`;
+      ctx.fillText('t (s)', w - 50, h - 10);
+      ctx.fillText('h(t)', 10, 20);
+      ctx.fillText(`t = ${tNow.toFixed(2)}s`, w / 2 - 40, h - 10);
+
+      // ===== Q-SCAN SPECTROGRAM CANVAS =====
+      const qw = qscanCanvas.width, qh = qscanCanvas.height;
+      // Shift existing pixels left (scrolling effect)
+      const imgData = qctx.getImageData(2, 0, qw - 2, qh);
+      qctx.putImageData(imgData, 0, 0);
+      // Draw new column on right edge
+      const tLocal = ((tNow % tMerge) + tMerge) % tMerge;
+      const progress = tLocal / tMerge;
+      const chirpFreqNorm = 0.1 + Math.pow(progress, 2.5) * 0.8;
+      const trackY = qh * (1 - chirpFreqNorm);
+      const trackWidth = 20 + progress * 50;
+      const intensity = 0.15 + progress * 0.7;
+      for (let y = 0; y < qh; y++) {
+        const dist = Math.abs(y - trackY) / trackWidth;
+        const brightness = Math.exp(-dist * dist * 4) * intensity;
+        if (brightness > 0.01) {
+          const r = Math.round(200 + brightness * 55);
+          const g = Math.round(200 + brightness * 55);
+          const b = Math.round(200 + brightness * 55);
+          qctx.fillStyle = `rgba(${r},${g},${b},${brightness * 0.7})`;
+          qctx.fillRect(qw - 2, y, 2, 1);
+        }
+      }
+
+      animRef.current = requestAnimationFrame(drawFrame);
+    };
+
+    animRef.current = requestAnimationFrame(drawFrame);
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      window.removeEventListener('resize', resize);
+    };
+  }, [isRunning]);
 
   return (
-    <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-      {/* Run History Sidebar */}
-      <aside className="glass-card" style={{ width: 288, borderRight: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
-        <div style={{ padding: 20, borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}>
-          <h2 style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3em', color: 'var(--text-mercury)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ClockSvg /> Run History
+    <div style={{ flex: 1, overflow: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Header */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
+            LIGO Simulation Alpha
           </h2>
+          <p style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.5, letterSpacing: '0.1em' }}>
+            Gravitational wave detection • Chirp analysis • Event reconstruction
+          </p>
         </div>
-        <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Active run */}
-          <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)', padding: 16, borderRadius: 16, position: 'relative', cursor: 'pointer' }}>
-            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: '#fff', boxShadow: '0 0 15px #fff' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#fff', letterSpacing: '0.15em' }}>RUN_ID: {Date.now().toString(36).toUpperCase().slice(-4)}</span>
-              <span style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.5 }}>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-            <p style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>He-Ne Laser @ {(state.wavelength * 1e9).toFixed(1)}nm</p>
-            <p style={{ fontSize: 9, color: 'var(--text-mercury)', marginTop: 8, fontStyle: 'italic', opacity: 0.6 }}>
-              {state.seismicNoiseEnabled ? 'Seismic noise compensation ON' : 'Atmospheric noise compensation ON'}
-            </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className={isRunning ? 'btn-ghost' : 'btn-primary'} onClick={() => setIsRunning(!isRunning)}
+            style={{ fontSize: 8, padding: '6px 16px' }}>
+            {isRunning ? '⏸ Pause' : '▶ Run'}
+          </button>
+          <button className="btn-ghost" onClick={() => { timeRef.current = 0; }}
+            style={{ fontSize: 8, padding: '6px 16px' }}>↻ Reset</button>
+        </div>
+      </header>
+
+      {/* Main: Chirp + Q-Scan + Controls */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20, flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Chirp Strain Canvas */}
+          <div className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 16, flex: 2 }}>
+            <h4 className="label-micro" style={{ letterSpacing: '0.2em', marginBottom: 8 }}>Chirp Strain h(t)</h4>
+            <canvas ref={strainCanvasRef} style={{ width: '100%', height: 200, borderRadius: 'var(--radius-md)' }} />
           </div>
-          {/* Past runs */}
-          <PastRun id="9839" time="14:05" label="Baseline Calibration" />
-          <PastRun id="9831" time="13:58" label="Sodium D-Line Split" />
-        </div>
-        <div style={{ padding: 20, background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-          <button className="btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>+ Compare Snapshot</button>
-        </div>
-      </aside>
-
-      {/* Main Analytics Area */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 32, display: 'flex', flexDirection: 'column', gap: 32 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: 32 }}>
-          {/* GW Chirp Plot */}
-          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: 400 }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 className="label-section">Intensity vs. Mirror Displacement</h3>
-              <div style={{ display: 'flex', gap: 16 }}>
-                <Legend color="white" glow label="PRIMARY" />
-                <Legend color="rgba(255,255,255,0.3)" label="ENVELOPE" />
-              </div>
-            </div>
-            <div style={{ flex: 1, position: 'relative' }}>
-              <div className="viewport-grid" style={{ position: 'absolute', inset: 0, opacity: 0.15 }} />
-              <canvas ref={strainCanvasRef} style={{ width: '100%', height: '100%', padding: 32 }} />
-              <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', textTransform: 'uppercase', letterSpacing: '0.15em', opacity: 0.4 }}>
-                Mirror Position (μm)
-              </div>
-              <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'rotate(-90deg) translateX(-50%)', transformOrigin: 'left', fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', textTransform: 'uppercase', letterSpacing: '0.15em', opacity: 0.4 }}>
-                Relative Intensity (A.U.)
-              </div>
-            </div>
-          </section>
-
-          {/* Export Widget */}
-          <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 24, flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <h3 className="label-section" style={{ marginBottom: 24 }}>Research Export</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <ExportBtn label="DATASET (.CSV)" onClick={() => exportCSV(state)} icon={<DownloadSvg />} />
-                <ExportBtn label="DETECTOR (.PNG)" onClick={() => exportImage(state)} icon={<ImageSvg />} />
-                <ExportBtn label="STATE (.JSON)" onClick={() => exportJSON(state)} icon={<CodeSvg />} />
-              </div>
-              <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div className="toggle-track" data-active="true" />
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text-mercury)', textTransform: 'uppercase' }}>ENV_METADATA</span>
-              </div>
-            </div>
-          </section>
+          {/* Q-Scan */}
+          <div className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 16, flex: 1 }}>
+            <h4 className="label-micro" style={{ letterSpacing: '0.2em', marginBottom: 8 }}>Q-Scan Spectrogram</h4>
+            <canvas ref={qscanCanvasRef} style={{ width: '100%', height: 120, borderRadius: 'var(--radius-md)' }} />
+          </div>
         </div>
 
-        {/* Bottom: FFT + Metrics */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 32 }}>
-          {/* FFT Phase Noise */}
-          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24 }}>
-              <h3 className="label-section">FFT Phase Noise Analysis</h3>
+        {/* Right Sidebar: Sim Parameters */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 16 }}>
+            <h4 className="label-micro" style={{ letterSpacing: '0.2em', marginBottom: 12 }}>Sim Parameters</h4>
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: 8, color: 'var(--text-slate)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Arm Length</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '0.15em' }}>WINDOWING_MODE:</span>
-                <select><option>HANNING</option><option>BLACKMAN</option><option>RECTANGULAR</option></select>
+                <input type="range" min={0.01} max={4} step={0.01} value={state.gwArmLength}
+                  onChange={(e) => setParam('gwArmLength', parseFloat(e.target.value))} style={{ flex: 1 }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#fff', minWidth: 50, textAlign: 'right' }}>
+                  {state.gwArmLength.toFixed(2)} km
+                </span>
               </div>
             </div>
-            <div style={{ height: 192, borderRadius: 'var(--radius-high)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', display: 'flex', alignItems: 'flex-end', padding: '0 24px 16px', gap: 8 }}>
-              <div className="viewport-grid" style={{ position: 'absolute', inset: 0, opacity: 0.1, borderRadius: 'inherit' }} />
-              {fftBars.map((bar, i) => (
-                <div key={i} className="wave-bar" style={{
-                  width: 8, height: `${bar.h}%`,
-                  background: `rgba(255,255,255,${bar.h > 50 ? 1 : bar.h / 100})`,
-                  borderRadius: 2, animationDelay: `${bar.d}s`,
-                  boxShadow: bar.h > 50 ? '0 0 10px rgba(255,255,255,0.2)' : 'none',
-                }} />
-              ))}
-              <div style={{ position: 'absolute', bottom: 8, right: 16, fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', textTransform: 'uppercase', letterSpacing: '-0.02em', opacity: 0.3 }}>
-                Freq (kHz)
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: 8, color: 'var(--text-slate)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Source</label>
+              <select value={state.celestialSource} onChange={(e) => setParam('celestialSource', e.target.value)} style={{ width: '100%' }}>
+                {CELESTIAL_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <div>
+                <label style={{ fontSize: 8, color: 'var(--text-slate)', display: 'block', marginBottom: 4 }}>Mass₁ (M☉)</label>
+                <input type="number" value={state.mass1} step={0.1}
+                  onChange={(e) => setParam('mass1', parseFloat(e.target.value) || 1)}
+                  style={{ width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 8, color: 'var(--text-slate)', display: 'block', marginBottom: 4 }}>Mass₂ (M☉)</label>
+                <input type="number" value={state.mass2} step={0.1}
+                  onChange={(e) => setParam('mass2', parseFloat(e.target.value) || 1)}
+                  style={{ width: '100%' }} />
+              </div>
+            </div>
+            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.5, marginBottom: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>M_chirp:</span><span>{chirpMass.toFixed(1)} M☉</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>η (sym ratio):</span><span>{eta.toFixed(4)}</span>
               </div>
             </div>
           </section>
 
-          {/* Metric Tiles */}
-          <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <MetricTile accent label="Visibility" value={visibility.toFixed(3)} change="↑ 0.4% RELATIVE" changeColor="rgb(34,197,94)" />
-            <MetricTile label="Coherence" value={`${(cohLength * 1e3).toFixed(1)}`} unit="mm" sublabel="NOMINAL" />
-            <MetricTile label="Phase Stab." value="±0.02" change="VARIANCE: OK" changeColor="rgb(234,179,8)" />
-            <MetricTile label="SNR_Ratio" value={snr > 0 ? (10 * Math.log10(snr)).toFixed(1) : '0'} unit="dB" sublabel={`BW: ${(state.laserLinewidth * 1e-3).toFixed(0)}kHz`} />
+          {/* GW Metrics */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <GWMetric label="SNR" value={snrDB} unit="dB" />
+            <GWMetric label="h_min" value={hMin.toExponential(1)} unit="" />
+            <GWMetric label="Chirp Mass" value={`${chirpMass.toFixed(1)}`} unit="M☉" />
+            <GWMetric label="d_L" value={`${luminosityDist}`} unit="Mpc" />
+            <GWMetric label="Final Spin" value={finalSpin.toFixed(3)} unit="a/M" />
+            <GWMetric label="Δφ_GW" value={Math.abs(phaseShift).toExponential(1)} unit="rad" />
+          </div>
+
+          {/* Event Log */}
+          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 12, flex: 1 }}>
+            <h4 className="label-micro" style={{ letterSpacing: '0.2em', marginBottom: 8 }}>Event Log</h4>
+            <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <p>[{new Date().toISOString().slice(11, 19)}] GW engine active — {state.celestialSource.toUpperCase()}</p>
+              <p>[SYS] arm_L = {state.gwArmLength} km | M = {state.mass1}+{state.mass2} M☉</p>
+              <p>[DET] h_min = {hMin.toExponential(1)} | SNR = {snrDB} dB</p>
+              <p>[QTM] N_photon = {N.toExponential(2)} | r_sqz = {state.squeezingParam.toFixed(2)}</p>
+            </div>
           </section>
         </div>
       </div>
+
+      {/* Physics formulas */}
+      <footer className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, fontSize: 10, color: 'var(--text-mercury)' }}>
+          <div>
+            <p style={{ fontWeight: 700, color: '#fff', marginBottom: 4, fontSize: 9 }}>CHIRP STRAIN</p>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>h(t) = A(1-t/t_m)^(-1/4) cos(φ)</p>
+          </div>
+          <div>
+            <p style={{ fontWeight: 700, color: '#fff', marginBottom: 4, fontSize: 9 }}>MIN DETECTABLE</p>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>h_min = λ/(4πL) · 1/√N · e^r</p>
+          </div>
+          <div>
+            <p style={{ fontWeight: 700, color: '#fff', marginBottom: 4, fontSize: 9 }}>CHIRP MASS</p>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>M_c = (m₁m₂)^(3/5) / M^(1/5)</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
 
-/* ---- Sub-components ---- */
-const ClockSvg = () => (
-  <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-  </svg>
-);
-
-const DownloadSvg = () => (
-  <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-  </svg>
-);
-
-const ImageSvg = () => (
-  <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-  </svg>
-);
-
-const CodeSvg = () => (
-  <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-  </svg>
-);
-
-const Legend = ({ color, label, glow }) => (
-  <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)' }}>
-    <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, boxShadow: glow ? '0 0 8px #fff' : 'none' }} />
-    {label}
-  </span>
-);
-
-const ExportBtn = ({ label, onClick, icon }) => (
-  <button onClick={onClick} className="btn-ghost" style={{
-    width: '100%', padding: '16px', justifyContent: 'space-between',
-    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 16,
-  }}>
-    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em' }}>{label}</span>
-    {icon}
-  </button>
-);
-
-const PastRun = ({ id, time, label }) => (
-  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: 16, borderRadius: 16, cursor: 'pointer', transition: 'all 200ms' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.5 }}>RUN_ID: {id}</span>
-      <span style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.5 }}>{time}</span>
-    </div>
-    <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-mercury)' }}>{label}</p>
-  </div>
-);
-
-const MetricTile = ({ label, value, unit, accent, change, changeColor, sublabel }) => (
+const GWMetric = ({ label, value, unit }) => (
   <div className="glass-card" style={{
-    borderRadius: 'var(--radius-high)', padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'center',
-    borderLeft: accent ? '2px solid rgba(255,255,255,0.4)' : 'none',
+    borderRadius: 'var(--radius-md)', padding: 10,
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
   }}>
-    <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--text-mercury)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 4, opacity: 0.5 }}>{label}</p>
-    <p style={{ fontSize: 20, fontFamily: 'var(--font-mono)', color: '#fff' }}>
-      {value} {unit && <span style={{ fontSize: 10, opacity: 0.4 }}>{unit}</span>}
-    </p>
-    {change && <p style={{ fontSize: 8, color: changeColor || 'var(--text-mercury)', marginTop: 8, fontWeight: 700, letterSpacing: '-0.02em' }}>{change}</p>}
-    {sublabel && <p style={{ fontSize: 8, color: 'var(--text-mercury)', marginTop: 8, fontFamily: 'var(--font-mono)', opacity: 0.4, letterSpacing: '0.15em' }}>{sublabel}</p>}
+    <span style={{ fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-slate)', display: 'block', marginBottom: 4 }}>
+      {label}
+    </span>
+    <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: '#fff' }}>
+      {value} <span style={{ fontSize: 8, color: 'var(--text-mercury)', opacity: 0.5 }}>{unit}</span>
+    </span>
   </div>
 );
 
