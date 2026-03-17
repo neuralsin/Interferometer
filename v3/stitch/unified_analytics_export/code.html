@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Michelson Interferometer | Analytics &amp; Export</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@300;400;500&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+          darkMode: 'class',
+          theme: {
+            extend: {
+              colors: {
+                primary: '#cbd5e1',
+                brand: '#ffffff',
+                silver: '#d1d5db',
+                mercury: '#9ca3af',
+                surface: '#050505',
+                panel: 'rgba(15, 23, 42, 0.6)',
+                glass: 'rgba(255, 255, 255, 0.03)',
+                glassBorder: 'rgba(255, 255, 255, 0.08)',
+                border: 'rgba(255, 255, 255, 0.1)'
+              },
+              fontFamily: {
+                sans: ['Inter', 'sans-serif'],
+                mono: ['JetBrains Mono', 'monospace'],
+              },
+              borderRadius: {
+                'custom': '16px',
+                'high': '24px',
+              }
+            }
+          }
+        }
+    </script>
+<style data-purpose="custom-layout">
+        body {
+            background-color: #000000;
+            color: #e2e8f0;
+            background-image: 
+                radial-gradient(circle at 20% 30%, rgba(30, 41, 59, 0.4) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(15, 23, 42, 0.4) 0%, transparent 50%);
+            background-attachment: fixed;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+
+        .silver-gradient {
+            background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .scientific-grid {
+            background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        @keyframes wave-flow {
+            0% { transform: scaleY(1); opacity: 0.5; }
+            50% { transform: scaleY(1.3); opacity: 1; }
+            100% { transform: scaleY(1); opacity: 0.5; }
+        }
+        .3d-bar {
+            transform-origin: bottom;
+            animation: wave-flow 2s ease-in-out infinite;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="font-sans antialiased h-screen flex flex-col overflow-hidden">
+<!-- BEGIN: MainHeader -->
+<header class="h-16 border-b border-glassBorder glass-card px-8 flex items-center justify-between z-20">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 border border-white/20 rounded-high flex items-center justify-center bg-white/5">
+<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</div>
+<div>
+<h1 class="text-sm font-bold tracking-[0.2em] text-white uppercase">Michelson Interferometer</h1>
+<p class="text-[9px] text-mercury font-mono tracking-[0.2em] opacity-60">ANALYTICS &amp; EXPORT DASHBOARD // V2.4.0</p>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="text-right hidden md:block border-r border-white/10 pr-6">
+<p class="text-[8px] text-mercury uppercase tracking-widest opacity-50">System Status</p>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+<p class="text-[10px] text-green-400 font-bold tracking-widest">REAL-TIME LINK ACTIVE</p>
+</div>
+</div>
+<button class="bg-white hover:bg-silver transition-all px-6 py-2 rounded-high text-[10px] font-bold uppercase tracking-widest text-black">
+            Run New Simulation
+        </button>
+</div>
+</header>
+<!-- END: MainHeader -->
+<!-- BEGIN: MainContent -->
+<main class="flex-1 flex overflow-hidden">
+<!-- BEGIN: SnapshotsSidebar -->
+<aside class="w-72 glass-card border-r border-white/10 flex flex-col z-10" data-purpose="history-snapshots" id="history-sidebar">
+<div class="p-5 border-b border-white/5 bg-white/[0.02]">
+<h2 class="text-[10px] font-bold uppercase tracking-[0.3em] text-mercury flex items-center gap-2">
+<svg class="h-4 w-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                Run History
+            </h2>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+<!-- Active Item -->
+<div class="bg-white/5 border border-white/20 p-4 rounded-custom relative overflow-hidden group cursor-pointer transition-all hover:bg-white/10">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-white shadow-[0_0_15px_#fff]"></div>
+<div class="flex justify-between items-start mb-2">
+<span class="text-[9px] font-mono text-white tracking-widest">RUN_ID: 9842</span>
+<span class="text-[9px] text-mercury opacity-50">14:22:01</span>
+</div>
+<p class="text-xs font-semibold text-white">He-Ne Laser @ 632.8nm</p>
+<p class="text-[9px] text-mercury mt-2 italic opacity-60">Atmospheric noise compensation ON</p>
+</div>
+<!-- Item 2 -->
+<div class="bg-white/[0.02] border border-white/5 p-4 rounded-custom cursor-pointer transition-all hover:border-white/20">
+<div class="flex justify-between items-start mb-2">
+<span class="text-[9px] font-mono text-mercury opacity-50">RUN_ID: 9839</span>
+<span class="text-[9px] text-mercury opacity-50">14:05:45</span>
+</div>
+<p class="text-xs font-medium text-mercury">Baseline Calibration</p>
+<div class="mt-3 h-0.5 w-full bg-white/10 rounded-full overflow-hidden">
+<div class="bg-mercury h-full w-full opacity-30"></div>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="bg-white/[0.02] border border-white/5 p-4 rounded-custom cursor-pointer transition-all hover:border-white/20">
+<div class="flex justify-between items-start mb-2">
+<span class="text-[9px] font-mono text-mercury opacity-50">RUN_ID: 9831</span>
+<span class="text-[9px] text-mercury opacity-50">13:58:12</span>
+</div>
+<p class="text-xs font-medium text-mercury">Sodium D-Line Split</p>
+</div>
+</div>
+<div class="p-5 bg-white/[0.02] border-t border-white/5">
+<button class="w-full glass-card py-2.5 text-[9px] font-bold uppercase tracking-[0.2em] text-mercury hover:text-white hover:bg-white/10 transition-all rounded-high border border-white/10">
+                + Compare Snapshot
+            </button>
+</div>
+</aside>
+<!-- END: SnapshotsSidebar -->
+<!-- BEGIN: DataAnalyticsArea -->
+<div class="flex-1 flex flex-col overflow-y-auto custom-scrollbar p-8 bg-surface">
+<div class="grid grid-cols-12 gap-8 mb-8">
+<!-- Main Plot -->
+<section class="col-span-12 lg:col-span-9 glass-card rounded-high overflow-hidden flex flex-col h-[500px]" data-purpose="main-intensity-plot">
+<div class="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+<h3 class="text-[10px] font-bold uppercase tracking-[0.2em] text-white">Intensity vs. Mirror Displacement</h3>
+<div class="flex gap-4">
+<span class="flex items-center gap-2 text-[9px] font-mono text-mercury">
+<span class="w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#fff]"></span> PRIMARY
+                        </span>
+<span class="flex items-center gap-2 text-[9px] font-mono text-mercury">
+<span class="w-2 h-2 rounded-full bg-mercury/30"></span> ENVELOPE
+                        </span>
+</div>
+</div>
+<div class="flex-1 scientific-grid relative p-8">
+<!-- 3D style fluctuating wave mock -->
+<div class="w-full h-full flex items-center justify-center">
+<svg class="w-full h-full opacity-80" viewbox="0 0 800 300">
+<defs>
+<lineargradient id="beamGrad" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" stop-color="transparent"></stop>
+<stop offset="50%" stop-color="#ffffff"></stop>
+<stop offset="100%" stop-color="transparent"></stop>
+</lineargradient>
+</defs>
+<path class="animate-pulse" d="M0,150 Q200,50 400,150 T800,150" fill="none" stroke="rgba(255,255,255,0.1)" stroke-dasharray="10,10" stroke-width="1"></path>
+<path d="M0,150 L800,150" stroke="rgba(255,255,255,0.05)" stroke-width="1"></path>
+<!-- Fluctuating Interference Wave -->
+<path d="M0,150 C50,120 100,180 150,150 S250,120 300,150 S400,180 450,150 S550,120 600,150 S750,180 800,150" fill="none" stroke="url(#beamGrad)" stroke-width="1.5">
+<animate attributename="d" dur="3s" repeatcount="indefinite" values="M0,150 C50,120 100,180 150,150 S250,120 300,150 S400,180 450,150 S550,120 600,150 S750,180 800,150; M0,150 C50,180 100,120 150,150 S250,180 300,150 S400,120 450,150 S550,180 600,150 S750,120 800,150; M0,150 C50,120 100,180 150,150 S250,120 300,150 S400,180 450,150 S550,120 600,150 S750,180 800,150"></animate>
+</path>
+</svg>
+</div>
+<div class="absolute bottom-4 left-1/2 -translate-x-1/2 text-[8px] font-mono text-mercury uppercase tracking-widest opacity-40">Mirror Position (μm)</div>
+<div class="absolute left-4 top-1/2 -rotate-90 origin-left -translate-y-1/2 text-[8px] font-mono text-mercury uppercase tracking-widest opacity-40">Relative Intensity (A.U.)</div>
+</div>
+</section>
+<!-- Export Widget -->
+<section class="col-span-12 lg:col-span-3 space-y-6" data-purpose="export-tools">
+<div class="glass-card rounded-high p-6 flex-1 flex flex-col">
+<h3 class="text-[10px] font-bold uppercase tracking-[0.2em] text-white mb-6">Research Export</h3>
+<div class="space-y-4">
+<button class="w-full flex items-center justify-between p-4 bg-white/[0.03] border border-white/10 rounded-custom hover:bg-white/10 hover:border-white/30 transition-all group">
+<span class="text-[10px] font-bold tracking-widest text-mercury group-hover:text-white">DATASET (.CSV)</span>
+<svg class="h-4 w-4 text-mercury opacity-40 group-hover:opacity-100" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<button class="w-full flex items-center justify-between p-4 bg-white/[0.03] border border-white/10 rounded-custom hover:bg-white/10 hover:border-white/30 transition-all group">
+<span class="text-[10px] font-bold tracking-widest text-mercury group-hover:text-white">DETECTOR (.TIFF)</span>
+<svg class="h-4 w-4 text-mercury opacity-40 group-hover:opacity-100" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<button class="w-full flex items-center justify-between p-4 bg-white/[0.03] border border-white/10 rounded-custom hover:bg-white/10 hover:border-white/30 transition-all group">
+<span class="text-[10px] font-bold tracking-widest text-mercury group-hover:text-white">STATE (.JSON)</span>
+<svg class="h-4 w-4 text-mercury opacity-40 group-hover:opacity-100" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<div class="mt-8 pt-6 border-t border-white/5">
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="relative flex items-center">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-white/10 border border-white/20 rounded-full peer-checked:bg-white/30 transition-all"></div>
+<div class="absolute left-1 w-2 h-2 bg-silver rounded-full peer-checked:translate-x-4 transition-all shadow-[0_0_8px_rgba(255,255,255,0.4)]"></div>
+</div>
+<span class="text-[9px] font-bold tracking-widest text-mercury uppercase group-hover:text-white">ENV_METADATA</span>
+</label>
+</div>
+</div>
+</section>
+</div>
+<!-- Metrics Row -->
+<div class="grid grid-cols-12 gap-8">
+<section class="col-span-12 lg:col-span-8 glass-card rounded-high p-6" data-purpose="fft-analysis">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-[10px] font-bold uppercase tracking-[0.2em] text-white">FFT Phase Noise Analysis</h3>
+<div class="flex items-center gap-4">
+<span class="text-[8px] font-mono text-mercury opacity-50 uppercase tracking-widest">WINDOWING_MODE:</span>
+<select class="bg-white/5 border-white/10 text-[9px] font-bold rounded-high px-4 py-1.5 text-white focus:ring-0 outline-none cursor-pointer tracking-widest">
+<option>HANNING</option>
+<option>BLACKMAN</option>
+<option>RECTANGULAR</option>
+</select>
+</div>
+</div>
+<div class="h-48 scientific-grid relative rounded-high border border-white/5 bg-black/40 flex items-end px-6 pb-4 gap-2">
+<!-- Mini 3D-style bars -->
+<div class="3d-bar w-2 bg-white/10 h-[25%]"></div>
+<div class="3d-bar w-2 bg-white/20 h-[40%]"></div>
+<div class="3d-bar w-2 bg-white/40 h-[10%]" style="animation-delay: 0.2s"></div>
+<div class="3d-bar w-2 bg-white h-[95%]" style="animation-delay: 0.5s"></div>
+<div class="3d-bar w-2 bg-white/60 h-[30%]" style="animation-delay: 0.8s"></div>
+<div class="3d-bar w-2 bg-white/20 h-[15%]" style="animation-delay: 0.1s"></div>
+<div class="3d-bar w-2 bg-white/30 h-[20%]" style="animation-delay: 0.3s"></div>
+<div class="3d-bar w-2 bg-white/80 h-[55%]" style="animation-delay: 0.6s"></div>
+<div class="3d-bar w-2 bg-white/10 h-[10%]"></div>
+<div class="absolute bottom-2 right-4 text-[8px] font-mono text-mercury uppercase tracking-tighter opacity-30">Freq (kHz)</div>
+</div>
+</section>
+<section class="col-span-12 lg:col-span-4 grid grid-cols-2 gap-4" data-purpose="metric-tiles">
+<div class="glass-card rounded-high p-5 flex flex-col justify-center border-l-2 border-white/40">
+<p class="text-[8px] font-bold text-mercury uppercase tracking-widest mb-1 opacity-50">Visibility</p>
+<p class="text-xl font-mono text-white">0.942</p>
+<p class="text-[8px] text-green-400 mt-2 font-bold tracking-tighter">↑ 0.4% RELATIVE</p>
+</div>
+<div class="glass-card rounded-high p-5 flex flex-col justify-center">
+<p class="text-[8px] font-bold text-mercury uppercase tracking-widest mb-1 opacity-50">Coherence</p>
+<p class="text-xl font-mono text-white">12.4 <span class="text-[10px] opacity-40">mm</span></p>
+<p class="text-[8px] text-mercury/40 mt-2 tracking-widest font-mono">NOMINAL</p>
+</div>
+<div class="glass-card rounded-high p-5 flex flex-col justify-center">
+<p class="text-[8px] font-bold text-mercury uppercase tracking-widest mb-1 opacity-50">Phase Stab.</p>
+<p class="text-xl font-mono text-white">±0.02</p>
+<p class="text-[8px] text-yellow-500/80 mt-2 font-bold tracking-widest">VARIANCE: OK</p>
+</div>
+<div class="glass-card rounded-high p-5 flex flex-col justify-center">
+<p class="text-[8px] font-bold text-mercury uppercase tracking-widest mb-1 opacity-50">SNR_Ratio</p>
+<p class="text-xl font-mono text-white">48.2 <span class="text-[10px] opacity-40">dB</span></p>
+<p class="text-[8px] text-mercury/40 mt-2 font-mono tracking-tighter">BW: 200kHz</p>
+</div>
+</section>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="h-10 border-t border-white/5 glass-panel px-8 flex items-center justify-between text-[8px] font-mono text-mercury/40 tracking-[0.2em]">
+<div class="flex gap-10">
+<span>CPU_LOAD: 14%</span>
+<span>GPU_ACCEL: TRUE</span>
+<span>BUFFER_SAMPLES: 40,000</span>
+</div>
+<div class="flex gap-4 items-center">
+<span class="w-1 h-1 rounded-full bg-mercury/20"></span>
+<span>LATENCY: 12ms // SERVER: US-EAST-SIM-04</span>
+</div>
+</footer>
+<script>
+    /**
+     * Minimal animation script for the fluctuating wave and bars
+     * to ensure the dashboard feels 'live' and matches the reference style.
+     */
+    const bars = document.querySelectorAll('.3d-bar');
+    setInterval(() => {
+        bars.forEach(bar => {
+            const currentHeight = parseFloat(bar.style.height || 50);
+            const fluctuation = (Math.random() - 0.5) * 10;
+            const newHeight = Math.max(10, Math.min(100, currentHeight + fluctuation));
+            bar.style.height = `${newHeight}%`;
+        });
+    }, 150);
+</script>
+</body></html>

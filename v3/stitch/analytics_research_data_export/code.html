@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Michelson Interferometer | Analytics &amp; Export</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#256af4',
+            surface: '#111827',
+            panel: '#1f2937',
+            border: '#374151'
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          borderRadius: {
+            'custom': '8px',
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-layout">
+    body {
+      background-color: #0b0f1a;
+      color: #f3f4f6;
+    }
+    .scientific-grid {
+      background-image: radial-gradient(circle, #374151 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="font-sans antialiased h-screen flex flex-col overflow-hidden">
+<!-- BEGIN: MainHeader -->
+<header class="bg-panel border-b border-border px-6 py-3 flex items-center justify-between z-10">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded-custom flex items-center justify-center">
+<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div>
+<h1 class="text-sm font-bold tracking-tight text-white uppercase">Michelson Interferometer</h1>
+<p class="text-[10px] text-gray-400 font-mono">ANALYTICS &amp; EXPORT DASHBOARD // V2.4.0</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="text-right hidden md:block">
+<p class="text-[10px] text-gray-500 uppercase">System Status</p>
+<p class="text-xs text-green-400 font-medium">REAL-TIME LINK ACTIVE</p>
+</div>
+<button class="bg-primary hover:bg-blue-600 transition-colors px-4 py-2 rounded-custom text-xs font-semibold text-white">
+        Run New Simulation
+      </button>
+</div>
+</header>
+<!-- END: MainHeader -->
+<!-- BEGIN: MainContent -->
+<main class="flex-1 flex overflow-hidden">
+<!-- BEGIN: SnapshotsSidebar -->
+<aside class="w-72 bg-panel border-r border-border flex flex-col" data-purpose="history-snapshots" id="history-sidebar">
+<div class="p-4 border-b border-border bg-surface/50">
+<h2 class="text-xs font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
+<svg class="h-4 w-4" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          Run History
+        </h2>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
+<!-- Snapshot Item 1 (Active) -->
+<div class="bg-surface border-l-4 border-primary p-3 rounded-custom shadow-sm cursor-pointer hover:bg-surface/80 transition-all">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] font-mono text-primary">RUN_ID: 9842</span>
+<span class="text-[10px] text-gray-500">14:22:01</span>
+</div>
+<p class="text-xs font-medium text-gray-200">He-Ne Laser @ 632.8nm</p>
+<p class="text-[10px] text-gray-400 mt-1 italic">Atmospheric noise compensation ON</p>
+</div>
+<!-- Snapshot Item 2 -->
+<div class="bg-gray-800/40 border-l-4 border-transparent p-3 rounded-custom hover:border-gray-600 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] font-mono text-gray-400">RUN_ID: 9839</span>
+<span class="text-[10px] text-gray-500">14:05:45</span>
+</div>
+<p class="text-xs font-medium text-gray-400">Baseline Calibration</p>
+<div class="mt-2 h-1 w-full bg-gray-700 rounded-full overflow-hidden">
+<div class="bg-gray-500 h-full w-[100%]"></div>
+</div>
+</div>
+<!-- Snapshot Item 3 -->
+<div class="bg-gray-800/40 border-l-4 border-transparent p-3 rounded-custom hover:border-gray-600 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] font-mono text-gray-400">RUN_ID: 9831</span>
+<span class="text-[10px] text-gray-500">13:58:12</span>
+</div>
+<p class="text-xs font-medium text-gray-400">Sodium D-Line Split</p>
+</div>
+</div>
+<!-- Add Snapshot Button -->
+<div class="p-4 bg-surface/50 border-t border-border">
+<button class="w-full border border-border py-2 text-[11px] font-bold uppercase tracking-wider text-gray-400 hover:bg-border hover:text-white transition-all rounded-custom">
+          + Compare Snapshot
+        </button>
+</div>
+</aside>
+<!-- END: SnapshotsSidebar -->
+<!-- BEGIN: DataAnalyticsArea -->
+<div class="flex-1 flex flex-col overflow-y-auto custom-scrollbar p-6 bg-surface">
+<!-- Top Grid: Intensity Plot & Export -->
+<div class="grid grid-cols-12 gap-6 mb-6">
+<!-- BEGIN: IntensityPlot -->
+<section class="col-span-12 lg:col-span-9 bg-panel border border-border rounded-custom overflow-hidden flex flex-col h-[450px]" data-purpose="main-intensity-plot">
+<div class="px-4 py-3 border-b border-border flex justify-between items-center bg-gray-800/20">
+<h3 class="text-sm font-semibold text-gray-300">Fringe Intensity vs. Mirror Displacement</h3>
+<div class="flex gap-2">
+<span class="flex items-center gap-1 text-[10px] text-gray-400">
+<span class="w-2 h-2 rounded-full bg-primary"></span> Primary Interference
+              </span>
+<span class="flex items-center gap-1 text-[10px] text-gray-400">
+<span class="w-2 h-2 rounded-full bg-orange-400"></span> Envelope
+              </span>
+</div>
+</div>
+<div class="flex-1 scientific-grid relative p-4">
+<!-- Simulated Canvas Area -->
+<canvas class="w-full h-full" data-purpose="interference-canvas" id="intensityCanvas"></canvas>
+<!-- Axis Labels -->
+<div class="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-mono text-gray-500">Mirror Position (μm)</div>
+<div class="absolute left-4 top-1/2 -rotate-90 origin-left -translate-y-1/2 text-[10px] font-mono text-gray-500">Relative Intensity (A.U.)</div>
+</div>
+</section>
+<!-- END: IntensityPlot -->
+<!-- BEGIN: ExportWidget -->
+<section class="col-span-12 lg:col-span-3 flex flex-col gap-6" data-purpose="export-tools">
+<div class="bg-panel border border-border rounded-custom p-4 flex-1">
+<h3 class="text-xs font-bold uppercase tracking-widest text-primary mb-4">Export Widget</h3>
+<div class="space-y-3">
+<button class="w-full flex items-center justify-between p-3 bg-surface border border-border rounded-custom hover:border-primary transition-colors group">
+<span class="text-xs font-medium text-gray-300 group-hover:text-white">Dataset (.CSV)</span>
+<svg class="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<button class="w-full flex items-center justify-between p-3 bg-surface border border-border rounded-custom hover:border-primary transition-colors group">
+<span class="text-xs font-medium text-gray-300 group-hover:text-white">Detector Image (.TIFF)</span>
+<svg class="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<button class="w-full flex items-center justify-between p-3 bg-surface border border-border rounded-custom hover:border-primary transition-colors group">
+<span class="text-xs font-medium text-gray-300 group-hover:text-white">Full State (.JSON)</span>
+<svg class="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<div class="mt-6 pt-6 border-t border-border">
+<label class="block text-[10px] font-bold text-gray-500 uppercase mb-2">Include Metadata</label>
+<div class="flex items-center gap-2">
+<input checked="" class="rounded bg-surface border-border text-primary focus:ring-primary h-3 w-3" type="checkbox"/>
+<span class="text-[10px] text-gray-400">Environmental Logs</span>
+</div>
+</div>
+</div>
+</section>
+<!-- END: ExportWidget -->
+</div>
+<!-- Bottom Row: FFT Analysis & Metrics -->
+<div class="grid grid-cols-12 gap-6">
+<!-- BEGIN: FFTAnalysis -->
+<section class="col-span-12 lg:col-span-8 bg-panel border border-border rounded-custom p-4" data-purpose="fft-analysis">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-sm font-semibold text-gray-300">Phase Noise FFT Analysis</h3>
+<select class="bg-surface border-border text-[10px] rounded-custom px-2 py-1 text-gray-400 focus:ring-primary outline-none">
+<option>Hanning Window</option>
+<option>Blackman-Harris</option>
+<option>Rectangular</option>
+</select>
+</div>
+<div class="h-48 scientific-grid relative p-2">
+<canvas class="w-full h-full" data-purpose="fft-plot-canvas" id="fftCanvas"></canvas>
+<div class="absolute bottom-1 right-2 text-[9px] font-mono text-gray-600 uppercase">Frequency (kHz)</div>
+</div>
+</section>
+<!-- END: FFTAnalysis -->
+<!-- BEGIN: KeyMetrics -->
+<section class="col-span-12 lg:col-span-4 grid grid-cols-2 gap-4" data-purpose="metric-tiles">
+<div class="bg-panel border border-border rounded-custom p-4 flex flex-col justify-center">
+<p class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Visibility (V)</p>
+<p class="text-2xl font-mono text-white">0.942</p>
+<p class="text-[10px] text-green-500 mt-1">↑ 0.4% from last</p>
+</div>
+<div class="bg-panel border border-border rounded-custom p-4 flex flex-col justify-center">
+<p class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Coherence Length</p>
+<p class="text-2xl font-mono text-white">12.4 <span class="text-xs">mm</span></p>
+<p class="text-[10px] text-gray-500 mt-1">Theoretical: 12.5mm</p>
+</div>
+<div class="bg-panel border border-border rounded-custom p-4 flex flex-col justify-center">
+<p class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Phase Stability</p>
+<p class="text-2xl font-mono text-white">±0.02<span class="text-xs"> rad</span></p>
+<p class="text-[10px] text-yellow-500 mt-1">Nominal Variance</p>
+</div>
+<div class="bg-panel border border-border rounded-custom p-4 flex flex-col justify-center">
+<p class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">SNR</p>
+<p class="text-2xl font-mono text-white">48.2 <span class="text-xs text-gray-500 font-sans">dB</span></p>
+<p class="text-[10px] text-gray-500 mt-1">BW: 200kHz</p>
+</div>
+</section>
+<!-- END: KeyMetrics -->
+</div>
+</div>
+<!-- END: DataAnalyticsArea -->
+</main>
+<!-- END: MainContent -->
+<!-- BEGIN: FooterStatus -->
+<footer class="bg-panel border-t border-border px-6 py-2 flex items-center justify-between text-[10px] text-gray-500 font-mono">
+<div class="flex gap-6">
+<span>CPU LOAD: 14%</span>
+<span>GPU ACCEL: ENABLED</span>
+<span>SAMPLES: 40,000</span>
+</div>
+<div>
+      LATENCY: 12ms | SERVER: US-EAST-SIM-04
+    </div>
+</footer>
+<!-- END: FooterStatus -->
+<!-- BEGIN: ChartScripts -->
+<script data-purpose="canvas-setup">
+    /**
+     * Simulation of Fringe Intensity & FFT Data on Canvas
+     */
+    window.addEventListener('load', () => {
+      // 1. Intensity Plot Canvas
+      const iCanvas = document.getElementById('intensityCanvas');
+      const iCtx = iCanvas.getContext('2d');
+      
+      const resizeCanvas = (canvas) => {
+        canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+        canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+      };
+
+      resizeCanvas(iCanvas);
+      
+      const drawInterference = () => {
+        const w = iCanvas.width;
+        const h = iCanvas.height;
+        iCtx.clearRect(0, 0, w, h);
+        
+        iCtx.beginPath();
+        iCtx.strokeStyle = '#256af4';
+        iCtx.lineWidth = 2;
+        
+        for (let x = 0; x < w; x++) {
+          const t = x / 50;
+          const envelope = Math.exp(-Math.pow((x - w/2)/(w/4), 2));
+          const wave = Math.cos(t * 15);
+          const y = (h/2) + (wave * envelope * (h/2.5));
+          
+          if (x === 0) iCtx.moveTo(x, y);
+          else iCtx.lineTo(x, y);
+        }
+        iCtx.stroke();
+
+        // Envelope
+        iCtx.setLineDash([5, 5]);
+        iCtx.beginPath();
+        iCtx.strokeStyle = 'rgba(251, 146, 60, 0.5)';
+        for (let x = 0; x < w; x++) {
+          const envelope = Math.exp(-Math.pow((x - w/2)/(w/4), 2));
+          const y = (h/2) - (envelope * (h/2.5));
+          if (x === 0) iCtx.moveTo(x, y);
+          else iCtx.lineTo(x, y);
+        }
+        iCtx.stroke();
+      };
+
+      drawInterference();
+
+      // 2. FFT Plot Canvas
+      const fCanvas = document.getElementById('fftCanvas');
+      const fCtx = fCanvas.getContext('2d');
+      resizeCanvas(fCanvas);
+
+      const drawFFT = () => {
+        const w = fCanvas.width;
+        const h = fCanvas.height;
+        fCtx.clearRect(0, 0, w, h);
+        
+        fCtx.beginPath();
+        fCtx.strokeStyle = '#10b981'; // Green accent
+        fCtx.lineWidth = 1.5;
+        
+        for (let x = 0; x < w; x++) {
+          const noise = Math.random() * 20;
+          let magnitude = noise;
+          
+          // Synthetic peaks
+          if (Math.abs(x - w/3) < 10) magnitude += 100 * (1 - Math.abs(x - w/3)/10);
+          if (Math.abs(x - w/1.5) < 5) magnitude += 60 * (1 - Math.abs(x - w/1.5)/5);
+          
+          const y = h - (magnitude / 150 * h) - 10;
+          if (x === 0) fCtx.moveTo(x, y);
+          else fCtx.lineTo(x, y);
+        }
+        fCtx.stroke();
+      };
+
+      drawFFT();
+
+      window.addEventListener('resize', () => {
+        resizeCanvas(iCanvas);
+        resizeCanvas(fCanvas);
+        drawInterference();
+        drawFFT();
+      });
+    });
+  </script>
+<!-- END: ChartScripts -->
+</body></html>

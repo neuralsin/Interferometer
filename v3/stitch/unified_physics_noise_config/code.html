@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Physics &amp; Noise Configuration | Quantum Research Suite</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@300;400&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#ffffff',
+                        silver: '#d1d5db',
+                        mercury: '#9ca3af',
+                        surface: '#050505',
+                        panel: '#0a0a0a',
+                        glass: 'rgba(255, 255, 255, 0.03)',
+                        glassBorder: 'rgba(255, 255, 255, 0.08)'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    borderRadius: {
+                        'custom': '12px',
+                        'high': '24px',
+                    }
+                }
+            }
+        }
+    </script>
+<style data-purpose="custom-layout-styling">
+        body {
+            background-color: #050505;
+            background-image: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.02) 0%, transparent 70%);
+            color: #d1d5db;
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .glass-card {
+            background: rgba(10, 10, 10, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+        .viewport-grid {
+            background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        
+        .wave-bar {
+            animation: wave-flow 2s ease-in-out infinite;
+        }
+        @keyframes wave-flow {
+            0%, 100% { transform: scaleY(1); opacity: 0.5; }
+            50% { transform: scaleY(1.5); opacity: 1; }
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            height: 2px;
+            border-radius: 2px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px;
+            width: 12px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="p-6 flex flex-col gap-6">
+<!-- BEGIN: Main Dashboard Header -->
+<header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 z-10">
+<div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 border border-white/20 rounded-full flex items-center justify-center bg-white/5">
+<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg>
+</div>
+<h1 class="text-lg font-bold tracking-[0.2em] text-white uppercase">Simulation Configuration</h1>
+</div>
+<p class="text-mercury text-[10px] uppercase tracking-[0.3em] mt-1 opacity-70">Engine v4.2.0-Alpha | Quantum Optical Research</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-5 py-2 glass-card bg-white/5 hover:bg-white/10 text-mercury text-[10px] font-bold tracking-widest rounded-high transition-all">
+            RESET_DEFAULTS
+        </button>
+<button class="px-5 py-2 bg-white text-black hover:bg-silver text-[10px] font-bold tracking-widest rounded-high transition-all">
+            APPLY_CONSTANTS
+        </button>
+</div>
+</header>
+<!-- END: Main Dashboard Header -->
+<main class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 overflow-hidden" data-purpose="main-grid">
+<!-- BEGIN: Wave Optics Section -->
+<section class="lg:col-span-4 glass-card rounded-custom p-6 flex flex-col" data-purpose="section-wave-optics">
+<div class="flex items-center justify-between mb-8">
+<h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-white">Wave Optics</h2>
+<span class="text-[8px] border border-white/20 px-2 py-0.5 rounded-full text-mercury font-mono uppercase">Propagation_Active</span>
+</div>
+<div class="space-y-6 flex-1">
+<div class="space-y-3">
+<div class="flex justify-between items-center text-[10px] tracking-wider uppercase text-mercury">
+<span>Beam Waist (w₀)</span>
+<span class="font-mono text-white">3.20 μm</span>
+</div>
+<input class="w-full" max="10" min="0" step="0.1" type="range" value="3.2"/>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-center text-[10px] tracking-wider uppercase text-mercury">
+<span>Rayleigh Range (z_R)</span>
+<span class="font-mono text-white">450.0 nm</span>
+</div>
+<input class="w-full" max="1000" min="10" step="10" type="range" value="450"/>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-center text-[10px] tracking-wider uppercase text-mercury">
+<span>Gouy Phase (ψ)</span>
+<span class="font-mono text-white">π/2 rad</span>
+</div>
+<input class="w-full" max="3.14" min="0" step="0.01" type="range" value="1.57"/>
+</div>
+<!-- Visualization Area -->
+<div class="mt-4 flex-1 glass-card bg-black/40 rounded-custom border border-white/5 relative overflow-hidden flex items-center justify-center">
+<div class="absolute inset-0 viewport-grid opacity-20"></div>
+<canvas class="w-full h-full relative z-10" id="beamCanvas"></canvas>
+<div class="absolute bottom-3 left-4 text-[8px] text-mercury/50 font-mono tracking-widest">LONGITUDINAL_PROFILE</div>
+</div>
+</div>
+</section>
+<!-- BEGIN: Stochastic Noise Profiles -->
+<section class="lg:col-span-8 glass-card rounded-custom p-6 flex flex-col" data-purpose="section-stochastic-noise">
+<div class="flex items-center justify-between mb-8">
+<h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-white">Noise Profiles</h2>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_#fff]"></span>
+<span class="text-[8px] font-mono text-mercury uppercase tracking-tighter">Phase PSD</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-white/30"></span>
+<span class="text-[8px] font-mono text-mercury uppercase tracking-tighter">Seismic Inj.</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1">
+<!-- 3D Style Graph Container -->
+<div class="md:col-span-8 glass-card bg-black/40 rounded-custom border border-white/5 relative overflow-hidden">
+<div class="absolute inset-0 viewport-grid opacity-10"></div>
+<!-- Mockup 3D Graph visualization -->
+<div class="absolute inset-0 flex items-end justify-center px-10 pb-12 gap-1.5">
+<!-- Iterative generation of bars for 3D effect -->
+<div class="wave-bar w-1 bg-white/5 h-[20%]"></div>
+<div class="wave-bar w-1 bg-white/10 h-[35%]" style="animation-delay: 0.1s"></div>
+<div class="wave-bar w-1 bg-white/20 h-[55%]" style="animation-delay: 0.2s"></div>
+<div class="wave-bar w-1 bg-white/40 h-[75%]" style="animation-delay: 0.3s"></div>
+<div class="wave-bar w-1 bg-white/60 h-[95%]" style="animation-delay: 0.4s"></div>
+<div class="wave-bar w-1 bg-white/100 h-[100%]" style="animation-delay: 0.5s"></div>
+<div class="wave-bar w-1 bg-white/70 h-[80%]" style="animation-delay: 0.6s"></div>
+<div class="wave-bar w-1 bg-white/40 h-[60%]" style="animation-delay: 0.7s"></div>
+<div class="wave-bar w-1 bg-white/20 h-[40%]" style="animation-delay: 0.8s"></div>
+<div class="wave-bar w-1 bg-white/10 h-[25%]" style="animation-delay: 0.9s"></div>
+<div class="wave-bar w-1 bg-white/40 h-[50%]" style="animation-delay: 1.0s"></div>
+<div class="wave-bar w-1 bg-white/70 h-[85%]" style="animation-delay: 1.1s"></div>
+<div class="wave-bar w-1 bg-white/100 h-[90%]" style="animation-delay: 1.2s"></div>
+<div class="wave-bar w-1 bg-white/60 h-[70%]" style="animation-delay: 1.3s"></div>
+<div class="wave-bar w-1 bg-white/30 h-[45%]" style="animation-delay: 1.4s"></div>
+</div>
+<!-- Labels -->
+<div class="absolute inset-x-8 bottom-3 flex justify-between text-[8px] font-mono text-mercury/50">
+<span>0.1 Hz</span>
+<span>100 Hz</span>
+<span>10 kHz</span>
+</div>
+<div class="absolute left-3 top-1/2 -rotate-90 origin-left text-[8px] font-mono text-mercury/50">DENSITY (dB/Hz)</div>
+</div>
+<!-- Side Metrics -->
+<div class="md:col-span-4 flex flex-col gap-4">
+<div class="p-4 glass-card bg-white/[0.03] rounded-custom border border-white/5">
+<p class="text-[8px] font-bold text-mercury uppercase tracking-widest mb-3">Seismic Injection</p>
+<div class="text-xl font-mono text-white mb-2">1.42e-12 <span class="text-[9px] opacity-40">m/√Hz</span></div>
+<div class="h-1 bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-white/40 w-[68%]"></div>
+</div>
+</div>
+<div class="p-4 glass-card bg-white/[0.03] rounded-custom border border-white/5">
+<p class="text-[8px] font-bold text-mercury uppercase tracking-widest mb-3">Phase Noise Integral</p>
+<div class="text-xl font-mono text-white mb-2">0.084 <span class="text-[9px] opacity-40">rad RMS</span></div>
+<div class="h-1 bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-white/40 w-[24%]"></div>
+</div>
+</div>
+<button class="mt-auto w-full py-3 glass-card bg-white/5 hover:bg-white/10 text-[9px] font-bold tracking-[0.2em] rounded-high flex items-center justify-center gap-2 uppercase transition-all">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                    Export PSD_Data
+                </button>
+</div>
+</div>
+</section>
+<!-- BEGIN: Quantum Effects -->
+<section class="lg:col-span-6 glass-card rounded-custom p-6" data-purpose="section-quantum-effects">
+<div class="flex items-center justify-between mb-8">
+<h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-white">Quantum Effects</h2>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-10 h-5 bg-white/10 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-silver after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-white/30"></div>
+<span class="ml-3 text-[9px] font-bold text-white tracking-widest uppercase">Shot Noise</span>
+</label>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<div class="space-y-6">
+<h3 class="text-[9px] font-bold text-mercury uppercase tracking-widest border-b border-white/5 pb-2">Squeezed Vacuum</h3>
+<div class="space-y-5">
+<div class="space-y-3">
+<label class="flex justify-between text-[9px] text-mercury tracking-wider uppercase">Magnitude <span class="text-white font-mono">1.25</span></label>
+<input class="w-full" type="range" value="65"/>
+</div>
+<div class="space-y-3">
+<label class="flex justify-between text-[9px] text-mercury tracking-wider uppercase">Angle <span class="text-white font-mono">45°</span></label>
+<input class="w-full" type="range" value="25"/>
+</div>
+</div>
+</div>
+<div class="flex flex-col items-center justify-center glass-card bg-black/40 rounded-custom border border-white/5 p-6">
+<!-- Phase Space Visualization -->
+<div class="relative w-32 h-32 border border-white/10 rounded-full flex items-center justify-center overflow-hidden">
+<div class="absolute w-full h-[0.5px] bg-white/10"></div>
+<div class="absolute h-full w-[0.5px] bg-white/10"></div>
+<!-- The Squeezed Ellipse -->
+<div class="w-20 h-6 border border-white/60 bg-white/5 rounded-full rotate-45 animate-pulse shadow-[0_0_15px_rgba(255,255,255,0.1)]"></div>
+<div class="absolute top-2 right-2 text-[7px] font-mono text-mercury/40">ΔX₁ΔX₂ ≥ 1</div>
+</div>
+<p class="mt-4 text-[8px] font-mono text-mercury/60 tracking-widest uppercase text-center">Quadrature Representation</p>
+</div>
+</div>
+</section>
+<!-- BEGIN: Detector Physics -->
+<section class="lg:col-span-6 glass-card rounded-custom p-6" data-purpose="section-detector-physics">
+<h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-white mb-8">Detector Physics</h2>
+<div class="grid grid-cols-2 gap-6 mb-8">
+<div class="space-y-3">
+<label class="text-[9px] font-bold text-mercury uppercase tracking-widest">Quantum Efficiency (η)</label>
+<div class="relative">
+<input class="w-full bg-white/[0.03] border-glassBorder rounded-high text-xs text-white px-4 py-2.5 focus:ring-1 focus:ring-white/20 focus:border-white/20 transition-all font-mono" type="text" value="0.98"/>
+<span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-mono text-mercury">98%</span>
+</div>
+</div>
+<div class="space-y-3">
+<label class="text-[9px] font-bold text-mercury uppercase tracking-widest">Dark Current (i_d)</label>
+<div class="relative">
+<input class="w-full bg-white/[0.03] border-glassBorder rounded-high text-xs text-white px-4 py-2.5 focus:ring-1 focus:ring-white/20 focus:border-white/20 transition-all font-mono" type="text" value="1.2"/>
+<span class="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-mono text-mercury uppercase">nA/cm²</span>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between p-4 glass-card bg-white/[0.02] rounded-custom border border-white/5">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 glass-card bg-white/5 rounded flex items-center justify-center border border-white/10">
+<svg class="w-5 h-5 text-mercury" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2zM9 17v-4m3 4v-6m3 6v-2" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg>
+</div>
+<div>
+<p class="text-[9px] font-bold text-white tracking-widest uppercase">Grid Resolution</p>
+<p class="text-[8px] text-mercury opacity-60 font-mono">4096 x 4096 PX</p>
+</div>
+</div>
+<select class="bg-black/60 border border-white/10 rounded-high text-[9px] text-silver font-bold uppercase py-1.5 px-4 focus:ring-0">
+<option>UHD-4K</option>
+<option>FHD-1080</option>
+<option>RAW-6K</option>
+</select>
+</div>
+<div class="flex items-center justify-between p-4 glass-card bg-white/[0.02] rounded-custom border border-white/5">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 glass-card bg-white/5 rounded flex items-center justify-center border border-white/10">
+<svg class="w-5 h-5 text-mercury" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg>
+</div>
+<div>
+<p class="text-[9px] font-bold text-white tracking-widest uppercase">Cooling Target</p>
+<p class="text-[8px] text-mercury opacity-60 font-mono">CRYO_STATE: 4.2K</p>
+</div>
+</div>
+<div class="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/10">
+<span class="text-[9px] font-mono font-bold text-white tracking-widest">STABLE</span>
+<div class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BEGIN: Footer Activity Feed -->
+<footer class="mt-4 pt-6 border-t border-glassBorder flex flex-col md:flex-row justify-between items-center gap-4 z-10">
+<div class="flex items-center gap-8 text-[9px] font-mono text-mercury/60 tracking-widest">
+<div class="flex items-center gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-white opacity-40"></span>
+<span>ENGINE: COMPUTING</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-white opacity-20"></span>
+<span>LAST SYNC: 2m AGO</span>
+</div>
+<span>KERNEL: v18.4.3-STOCHASTIC</span>
+</div>
+<div class="text-[9px] font-mono text-mercury/30 tracking-widest">
+        CID: 0x2A88F4...119D
+    </div>
+</footer>
+<script>
+    // Canvas Visualization for Beam Profile
+    const canvas = document.getElementById('beamCanvas');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        const resize = () => {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            draw();
+        };
+
+        const draw = () => {
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(0, h/2);
+            ctx.lineTo(w, h/2);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            
+            const midH = h / 2;
+            const waistX = w / 2;
+            
+            for (let x = 0; x <= w; x++) {
+                const z = (x - waistX) / (w / 4);
+                const waist = 10 * Math.sqrt(1 + z * z);
+                if (x === 0) ctx.moveTo(x, midH - waist);
+                else ctx.lineTo(x, midH - waist);
+            }
+            
+            for (let x = w; x >= 0; x--) {
+                const z = (x - waistX) / (w / 4);
+                const waist = 10 * Math.sqrt(1 + z * z);
+                ctx.lineTo(x, midH + waist);
+            }
+            
+            ctx.closePath();
+            const grad = ctx.createLinearGradient(0, 0, w, 0);
+            grad.addColorStop(0, 'rgba(255,255,255,0.05)');
+            grad.addColorStop(0.5, 'rgba(255,255,255,0.15)');
+            grad.addColorStop(1, 'rgba(255,255,255,0.05)');
+            ctx.fillStyle = grad;
+            ctx.fill();
+            ctx.stroke();
+        };
+
+        window.addEventListener('resize', resize);
+        resize();
+    }
+</script>
+</body></html>

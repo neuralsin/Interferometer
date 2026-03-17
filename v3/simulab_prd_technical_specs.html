@@ -1,0 +1,33 @@
+# PRD: Michelson Interferometer Research-Grade Simulab
+
+## 1. Project Overview
+A dual-purpose web application designed for both undergraduate education and high-precision PhD-level research simulation of a Michelson Interferometer. The system utilizes Three.js for 3D visualization, WebAssembly (Wasm) for high-precision physics calculations, and WebGPU/Compute shaders for real-time interference pattern rendering.
+
+## 2. Technical Architecture
+- **Rendering Engine:** Three.js with custom GLSL shaders for volumetric laser propagation and real-time fringe rendering.
+- **Physics Core:** C++/Rust compiled to Wasm for 64-bit precision (picometer scale).
+- **Computation:** Gaussian beam propagation models, Jones Calculus for polarization, and stochastic noise modeling (Wiener processes).
+- **UI/UX:** State-driven "Toggle Architecture" to switch between Pedagogical and Research modes.
+
+## 3. Key Research Features
+- **Gaussian Beam Profiling:** Full modeling of beam waist, Rayleigh range, and Gouy phase shifts.
+- **Noise Modeling:** 
+    - Phase Noise (laser linewidth jitter).
+    - Environmental Noise (seismic/acoustic vibration).
+    - Detector Noise (Shot noise, Dark current, Quantum Efficiency).
+    - Thermal Expansion (Invar vs. Aluminum mounts).
+- **Advanced Modules:**
+    - Quantum Panel: Squeezed vacuum state injection.
+    - Astronomical Panel: Gravitational wave strain (LIGO-scale simulation).
+- **Precise Controls:** Microradian tip/tilt, picometer translation, and material-specific thermal coefficients.
+
+## 4. User Experience & Flows
+- **Interactive 3D Setup:** Drag-and-drop optical components on a 25mm grid breadboard.
+- **Real-time Feedback:** Immediate fringe pattern updates on the detector screen as variables change.
+- **Data Export:** CSV and TIFF export of simulated detector arrays for external analysis (Python/MATLAB).
+- **Simulab Presets:** Pre-configured setups for HeNe, Nd:YAG, and Gravitational Wave detection scenarios.
+
+## 5. Visual Standards
+- High-fidelity GLTF models of kinematic mounts.
+- Volumetric raymarching for laser beams.
+- Physically accurate wavelength-to-color mapping.

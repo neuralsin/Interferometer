@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Michelson Interferometer - Simulab Research View</title>
+<!-- BEGIN: External Scripts -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@300;400&amp;display=swap" rel="stylesheet"/>
+<!-- END: External Scripts -->
+<script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: '#ffffff',
+            silver: '#d1d5db',
+            mercury: '#9ca3af',
+            surface: '#050505',
+            glass: 'rgba(255, 255, 255, 0.03)',
+            glassBorder: 'rgba(255, 255, 255, 0.08)'
+          },
+          borderRadius: {
+            'custom': '12px',
+            'high': '24px',
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-layout">
+    body {
+      background-color: #050505;
+      background-image: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.02) 0%, transparent 70%);
+      color: #d1d5db;
+      overflow-x: hidden;
+      font-family: "Inter", sans-serif;
+    }
+    .glass-panel {
+      background: rgba(15, 15, 15, 0.6);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .viewport-grid {
+      background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .laser-beam {
+      filter: drop-shadow(0 0 8px currentColor);
+    }
+    input[type="range"] {
+      accent-color: #ffffff;
+      height: 4px;
+    }
+    .formula {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.75rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      display: block;
+      color: #fff;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+<!-- BEGIN: MainHeader -->
+<header class="h-16 border-b border-glassBorder glass-panel px-8 flex items-center justify-between z-20" data-purpose="app-header">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 border border-white/20 rounded-high flex items-center justify-center bg-white/5">
+<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</div>
+<div>
+<h1 class="text-xs font-bold tracking-[0.2em] text-white">SIMULAB RESEARCH</h1>
+<p class="text-[9px] text-mercury uppercase tracking-[0.3em]">MICHELSON INTERFEROMETER V4.2</p>
+</div>
+</div>
+<button class="bg-white hover:bg-silver text-black font-bold py-2 px-6 rounded-high transition-all shadow-lg text-[10px] tracking-widest uppercase" data-purpose="primary-action" id="guidedModeBtn">
+    Guided Mode
+  </button>
+</header>
+<!-- END: MainHeader -->
+<!-- BEGIN: MainContent -->
+<main class="flex-1 overflow-hidden flex p-6 gap-6" data-purpose="main-grid">
+<!-- LEFT COLUMN: Visualization & Controls -->
+<div class="flex-1 flex flex-col gap-6">
+<!-- BEGIN: 3D Visualization Area -->
+<section class="relative glass-panel rounded-high flex-1 flex items-center justify-center overflow-hidden" data-purpose="visualization-viewport">
+<div class="absolute inset-0 viewport-grid opacity-30"></div>
+<!-- Metadata Overlay -->
+<div class="absolute top-6 left-6">
+<div class="bg-black/40 backdrop-blur-md p-3 rounded-custom border border-white/5 text-[9px] font-mono text-mercury space-y-1">
+<p class="text-white font-bold mb-2 tracking-widest uppercase">Optical Geometry</p>
+<div class="flex justify-between gap-8"><span>VECTOR:</span> <span class="text-white">XYZ_AXIS</span></div>
+<div class="flex justify-between gap-8"><span>SOURCE:</span> <span class="text-white" id="metadata-source">633 NM</span></div>
+</div>
+</div>
+<!-- Component Labels -->
+<div class="absolute top-12 left-1/2 -translate-x-1/2 bg-white/5 backdrop-blur-lg px-3 py-1 rounded border border-white/10 text-[9px] font-bold tracking-widest text-white z-10 uppercase">Movable Mirror (M1)</div>
+<div class="absolute top-1/2 right-12 -translate-y-1/2 bg-white/5 backdrop-blur-lg px-3 py-1 rounded border border-white/10 text-[9px] font-bold tracking-widest text-white z-10 rotate-90 uppercase">Fixed Mirror (M2)</div>
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/10 backdrop-blur-xl w-14 h-14 border border-white/20 rotate-45 flex items-center justify-center z-10">
+<span class="text-[8px] text-white -rotate-45 font-bold tracking-tighter">BS-1</span>
+</div>
+<!-- SVG Schematic -->
+<svg class="w-full h-full max-w-4xl" id="schematic" viewbox="0 0 800 500">
+<!-- Laser Source -->
+<rect fill="rgba(255,255,255,0.05)" height="30" rx="4" stroke="rgba(255,255,255,0.1)" width="50" x="50" y="235"></rect>
+<circle class="animate-pulse shadow-xl" cx="90" cy="250" fill="#fff" r="2"></circle>
+<text fill="#94a3b8" font-size="8" font-weight="700" letter-spacing="1" x="52" y="280">SOURCE_01</text>
+<!-- Beam Paths -->
+<line class="laser-beam" id="beam-main" stroke="#ff0000" stroke-opacity="0.4" stroke-width="1.5" x1="100" x2="400" y1="250" y2="250"></line>
+<line class="laser-beam" id="beam-m1" stroke="#ff0000" stroke-opacity="0.4" stroke-width="1.5" x1="400" x2="400" y1="250" y2="50"></line>
+<line class="laser-beam" id="beam-m2" stroke="#ff0000" stroke-opacity="0.4" stroke-width="1.5" x1="400" x2="700" y1="250" y2="250"></line>
+<line class="laser-beam" id="beam-detector" stroke="#ff0000" stroke-opacity="0.4" stroke-width="1.5" x1="400" x2="400" y1="250" y2="450"></line>
+<!-- Fixed Mirror M2 -->
+<rect fill="rgba(255,255,255,0.1)" height="80" stroke="rgba(255,255,255,0.3)" width="4" x="700" y="210"></rect>
+<!-- Movable Mirror M1 -->
+<rect fill="rgba(255,255,255,0.1)" height="4" id="m1-rect" stroke="rgba(255,255,255,0.3)" width="80" x="360" y="40"></rect>
+<!-- Detector -->
+<rect fill="rgba(255,255,255,0.05)" height="10" rx="2" stroke="rgba(255,255,255,0.1)" width="60" x="370" y="450"></rect>
+<text fill="#94a3b8" font-size="8" font-weight="700" letter-spacing="1" x="435" y="457">DETECTOR_UNIT</text>
+</svg>
+</section>
+<!-- END: 3D Visualization Area -->
+<!-- BEGIN: Control Panel -->
+<section class="glass-panel p-6 rounded-high grid grid-cols-1 md:grid-cols-2 gap-10" data-purpose="interaction-controls">
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<label class="text-[10px] font-bold uppercase tracking-[0.2em] text-mercury">Laser Engine λ</label>
+<span class="text-white font-mono text-xs" id="lambda-val">633.00 nm</span>
+</div>
+<input class="w-full appearance-none bg-white/10 rounded-full cursor-pointer" id="wavelength" max="750" min="400" type="range" value="633"/>
+<p class="text-[9px] text-mercury/50 italic tracking-wide">Adjust subatomic source wavelength.</p>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<label class="text-[10px] font-bold uppercase tracking-[0.2em] text-mercury">Geometry Offset Δd</label>
+<span class="text-white font-mono text-xs" id="delta-val">0.00 μm</span>
+</div>
+<input class="w-full appearance-none bg-white/10 rounded-full cursor-pointer" id="pathDiff" max="2000" min="-2000" type="range" value="0"/>
+<p class="text-[9px] text-mercury/50 italic tracking-wide">Actuate primary arm micro-adjustment.</p>
+</div>
+</section>
+<!-- END: Control Panel -->
+</div>
+<!-- RIGHT COLUMN: Results & Physics -->
+<div class="w-96 flex flex-col gap-6">
+<!-- BEGIN: Fringe Viewer -->
+<section class="glass-panel p-6 rounded-high flex flex-col items-center" data-purpose="fringe-viewer-container">
+<h3 class="text-[10px] font-bold uppercase tracking-[0.25em] text-white mb-6 self-start">Interferogram</h3>
+<div class="bg-black w-full aspect-square rounded-full border border-white/10 flex items-center justify-center relative overflow-hidden shadow-[inset_0_0_40px_rgba(0,0,0,1)]">
+<canvas class="w-full h-full opacity-90" height="300" id="fringeCanvas" width="300"></canvas>
+<div class="absolute inset-0 bg-gradient-to-t from-white/5 to-transparent pointer-events-none"></div>
+</div>
+<div class="mt-6 text-center">
+<p class="text-[9px] text-mercury uppercase tracking-widest font-medium">Detector Output Stream</p>
+</div>
+</section>
+<!-- END: Fringe Viewer -->
+<!-- BEGIN: Physics Panel -->
+<section class="glass-panel p-6 rounded-high flex-grow flex flex-col" data-purpose="physics-explanation">
+<h3 class="text-[10px] font-bold uppercase tracking-[0.25em] text-white mb-6">Simulation Analysis</h3>
+<div class="space-y-5 text-xs leading-relaxed text-mercury overflow-y-auto pr-2 custom-scrollbar">
+<p class="text-justify opacity-80">
+          The coherent source beams recombine at the semi-reflective interface (BS-1), inducing interference proportional to the resultant <strong>phase differential</strong>.
+        </p>
+<div class="formula text-center">
+          I = 2I₀(1 + cos(δ))
+        </div>
+<p class="opacity-80">
+          The quantum phase <span class="font-mono text-white">δ</span> is a function of the optical path difference <span class="font-mono text-white">ΔL</span>:
+        </p>
+<div class="formula text-center">
+          δ = (2π / λ) * 2Δd
+        </div>
+<div class="pt-2 space-y-3">
+<div class="flex items-start gap-3">
+<div class="w-1.5 h-1.5 rounded-full bg-white mt-1 shrink-0"></div>
+<p class="text-[10px] tracking-wide"><span class="text-white font-bold uppercase">Constructive:</span> Maximum intensity achieved when path differential is a multiple of λ.</p>
+</div>
+<div class="flex items-start gap-3">
+<div class="w-1.5 h-1.5 rounded-full border border-white/40 mt-1 shrink-0"></div>
+<p class="text-[10px] tracking-wide"><span class="text-white font-bold uppercase">Destructive:</span> Phase cancellation occurs at half-multiples of λ.</p>
+</div>
+</div>
+</div>
+<div class="mt-auto pt-6 border-t border-white/5">
+<button class="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-high text-[9px] font-bold tracking-[0.2em] uppercase text-silver transition-all">
+            Recalibrate System
+        </button>
+</div>
+</section>
+<!-- END: Physics Panel -->
+</div>
+</main>
+<!-- END: MainContent -->
+<!-- BEGIN: Logic Scripts -->
+<script data-purpose="interferometer-logic">
+    const wavelengthInput = document.getElementById('wavelength');
+    const pathDiffInput = document.getElementById('pathDiff');
+    const lambdaValText = document.getElementById('lambda-val');
+    const deltaValText = document.getElementById('delta-val');
+    const metadataSource = document.getElementById('metadata-source');
+    const m1Rect = document.getElementById('m1-rect');
+    const canvas = document.getElementById('fringeCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function nmToRGB(wavelength) {
+      let r, g, b;
+      if (wavelength >= 380 && wavelength < 440) {
+        r = (-(wavelength - 440) / (440 - 380)); g = 0; b = 1;
+      } else if (wavelength >= 440 && wavelength < 490) {
+        r = 0; g = (wavelength - 440) / (490 - 440); b = 1;
+      } else if (wavelength >= 490 && wavelength < 510) {
+        r = 0; g = 1; b = (-(wavelength - 510) / (510 - 490));
+      } else if (wavelength >= 510 && wavelength < 580) {
+        r = (wavelength - 510) / (580 - 510); g = 1; b = 0;
+      } else if (wavelength >= 580 && wavelength < 645) {
+        r = 1; g = (-(wavelength - 645) / (645 - 580)); b = 0;
+      } else if (wavelength >= 645 && wavelength <= 780) {
+        r = 1; g = 0; b = 0;
+      } else {
+        r = 0; g = 0; b = 0;
+      }
+      return `rgb(${Math.floor(r * 255)}, ${Math.floor(g * 255)}, ${Math.floor(b * 255)})`;
+    }
+
+    function updateSim() {
+      const λ = parseInt(wavelengthInput.value);
+      const Δd = parseInt(pathDiffInput.value); 
+      
+      lambdaValText.innerText = `${λ}.00 nm`;
+      metadataSource.innerText = `${λ} NM`;
+      deltaValText.innerText = `${(Δd / 1000).toFixed(2)} μm`;
+
+      const visualOffset = (Δd / 2000) * 20; 
+      m1Rect.setAttribute('y', 40 + visualOffset);
+      
+      const beamColor = nmToRGB(λ);
+      document.querySelectorAll('line[id^="beam-"]').forEach(line => {
+        line.setAttribute('stroke', beamColor);
+        line.style.color = beamColor;
+      });
+
+      drawFringes(λ, Δd);
+    }
+
+    function drawFringes(lambda, pathDiff) {
+      const width = canvas.width;
+      const height = canvas.height;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      
+      ctx.clearRect(0, 0, width, height);
+      
+      const rgb = nmToRGB(lambda);
+      const match = rgb.match(/\d+/g);
+      const r = match[0], g = match[1], b = match[2];
+
+      for (let radius = 0; radius < width; radius += 1.5) {
+        const theta = radius / 180; 
+        const phase = (2 * Math.PI / lambda) * (2 * pathDiff * Math.cos(theta));
+        const intensity = (Math.cos(phase / 2)) ** 2;
+
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${intensity * 0.8})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
+    wavelengthInput.addEventListener('input', updateSim);
+    pathDiffInput.addEventListener('input', updateSim);
+    updateSim();
+  </script>
+<script data-purpose="interactive-guides">
+    document.getElementById('guidedModeBtn').addEventListener('click', () => {
+      const messages = [
+        "SYSTEM CALIBRATION INITIATED",
+        "1. Modulate 'Geometry Offset' (Δd) to observe real-time phase shift in the Interferogram.",
+        "2. Adjust 'Laser Engine' wavelength (λ) to analyze spectral fringe density.",
+        "3. Review the 'Simulation Analysis' panel for subatomic physics verification."
+      ];
+      alert(messages.join("\n\n"));
+    });
+  </script>
+<!-- END: Logic Scripts -->
+</body></html>

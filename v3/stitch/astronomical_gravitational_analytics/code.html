@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Gravitational Wave Observatory | LIGO Simulation</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter & Space Grotesk -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#94a3b8', // Silver/Grey
+            accent: '#38bdf8', // Cyan pulse
+            surface: '#020617', // Pure black-ish
+            panel: 'rgba(30, 41, 59, 0.4)', // Glassmorphic
+            border: 'rgba(255, 255, 255, 0.1)'
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Space Grotesk', 'sans-serif'],
+          },
+          borderRadius: {
+            'custom': '24px',
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-layout">
+    body {
+      background-color: #020617;
+      color: #94a3b8;
+    }
+    .glass-effect {
+      backdrop-filter: blur(12px);
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .scientific-grid {
+      background-image: radial-gradient(circle, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+      background-size: 30px 30px;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.2);
+      border-radius: 10px;
+    }
+    @keyframes pulse-cyan {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .animate-pulse-cyan {
+      animation: pulse-cyan 3s infinite;
+    }
+  </style>
+</head>
+<body class="font-sans antialiased h-screen flex flex-col overflow-hidden">
+<!-- BEGIN: MainHeader -->
+<header class="bg-surface border-b border-border/50 px-8 py-4 flex items-center justify-between z-10">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 bg-gradient-to-br from-slate-400 to-slate-600 rounded-custom flex items-center justify-center shadow-lg shadow-blue-900/20">
+<svg class="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</div>
+<div>
+<h1 class="text-lg font-display font-bold tracking-tight text-slate-200 uppercase">LIGO Simulation Alpha</h1>
+<p class="text-[10px] text-slate-500 font-mono tracking-widest">GRAVITATIONAL WAVE OBSERVATORY // REF: GW150914</p>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="text-right hidden md:block border-r border-border pr-6">
+<p class="text-[10px] text-slate-500 uppercase">Detection Sensitivity</p>
+<p class="text-xs text-accent font-medium animate-pulse-cyan">OPTIMAL - 10⁻²² STRAIN</p>
+</div>
+<button class="bg-slate-200 hover:bg-white transition-all px-6 py-2.5 rounded-custom text-xs font-bold text-slate-900 shadow-xl">
+        INITIALIZE MERGER SIM
+      </button>
+</div>
+</header>
+<!-- END: MainHeader -->
+<!-- BEGIN: MainContent -->
+<main class="flex-1 flex overflow-hidden p-4 gap-4">
+<!-- BEGIN: ControlSidebar -->
+<aside class="w-80 glass-effect rounded-custom flex flex-col overflow-hidden" data-purpose="simulation-controls">
+<div class="p-6 border-b border-border">
+<h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2 mb-6">
+<svg class="h-4 w-4" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          Simulation Params
+        </h2>
+<div class="space-y-6">
+<div>
+<label class="block text-[10px] font-bold text-slate-500 uppercase mb-3">Interferometer Arm Length</label>
+<input class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-slate-400" max="10" min="1" step="0.5" type="range" value="4"/>
+<div class="flex justify-between mt-2 font-mono text-[10px] text-slate-400">
+<span>1 km</span>
+<span class="text-slate-200">Current: 4.0 km</span>
+<span>10 km</span>
+</div>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-slate-500 uppercase mb-3">Celestial Source</label>
+<select class="w-full bg-slate-900/50 border border-border text-xs rounded-xl px-3 py-2.5 text-slate-300 focus:ring-1 focus:ring-slate-500 outline-none">
+<option>Binary Black Hole Merger</option>
+<option>Neutron Star Inspiral</option>
+<option>Supernova Asymmetry</option>
+<option>Stochastic Background</option>
+</select>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-slate-500 uppercase mb-3">Total Mass (M☉)</label>
+<div class="grid grid-cols-2 gap-2">
+<input class="bg-slate-900/50 border border-border text-xs rounded-lg px-3 py-2 text-slate-300" placeholder="M1: 36" type="number"/>
+<input class="bg-slate-900/50 border border-border text-xs rounded-lg px-3 py-2 text-slate-300" placeholder="M2: 29" type="number"/>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+<h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Recent Event Logs</h3>
+<div class="glass-effect p-4 rounded-2xl border border-white/5 space-y-2">
+<div class="flex justify-between items-center">
+<span class="text-[9px] font-mono text-accent">GW-DET-9921</span>
+<span class="text-[9px] text-slate-600">Active</span>
+</div>
+<p class="text-xs text-slate-200 font-medium">Chirp Signal Detected</p>
+<div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden mt-2">
+<div class="bg-accent h-full w-2/3"></div>
+</div>
+</div>
+<div class="p-4 rounded-2xl border border-white/5 opacity-50 space-y-2">
+<p class="text-[9px] font-mono text-slate-500">GW-DET-9918</p>
+<p class="text-xs text-slate-400 font-medium">Glitch: Seismic Noise</p>
+</div>
+</div>
+</aside>
+<!-- END: ControlSidebar -->
+<!-- BEGIN: VisualAnalytics -->
+<div class="flex-1 flex flex-col gap-4 overflow-hidden">
+<!-- Top Visualization: Chirp Waveform -->
+<section class="flex-1 glass-effect rounded-custom overflow-hidden flex flex-col min-h-0" data-purpose="strain-visualization">
+<div class="px-6 py-4 border-b border-border flex justify-between items-center">
+<h3 class="text-sm font-display font-semibold text-slate-200">Gravitational Strain (h) vs. Time</h3>
+<div class="flex gap-4">
+<span class="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_#38bdf8]"></span> Strain Signal
+              </span>
+<span class="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span> Noise Floor
+              </span>
+</div>
+</div>
+<div class="flex-1 scientific-grid relative p-8">
+<canvas class="w-full h-full" id="strainCanvas"></canvas>
+<!-- Labels -->
+<div class="absolute bottom-6 left-1/2 -translate-x-1/2 text-[9px] font-mono uppercase tracking-[0.2em] text-slate-600">Time to Merger (ms)</div>
+<div class="absolute left-6 top-1/2 -rotate-90 origin-left -translate-y-1/2 text-[9px] font-mono uppercase tracking-[0.2em] text-slate-600">Strain (×10⁻²¹)</div>
+<!-- Overlay 3D Hint -->
+<div class="absolute top-4 right-8 text-[10px] font-mono text-slate-700 bg-slate-900/50 px-2 py-1 rounded border border-white/5">
+                3D_RENDER_MODE: TRUE
+              </div>
+</div>
+</section>
+<!-- Bottom Row: Metrics & Spectrogram -->
+<div class="grid grid-cols-12 gap-4 h-64">
+<!-- Metrics -->
+<section class="col-span-4 grid grid-cols-2 gap-4">
+<div class="glass-effect rounded-custom p-5 flex flex-col justify-center border-l-4 border-l-slate-400">
+<p class="text-[10px] font-bold text-slate-500 uppercase tracking-tight mb-1">SNR Ratio</p>
+<p class="text-2xl font-display font-bold text-slate-200">24.1</p>
+<p class="text-[9px] text-accent mt-1">High Confidence</p>
+</div>
+<div class="glass-effect rounded-custom p-5 flex flex-col justify-center">
+<p class="text-[10px] font-bold text-slate-500 uppercase tracking-tight mb-1">Chirp Mass</p>
+<p class="text-2xl font-display font-bold text-slate-200">28.1 <span class="text-xs text-slate-500 font-sans">M☉</span></p>
+<p class="text-[9px] text-slate-500 mt-1">±0.2 Error Margin</p>
+</div>
+<div class="glass-effect rounded-custom p-5 flex flex-col justify-center">
+<p class="text-[10px] font-bold text-slate-500 uppercase tracking-tight mb-1">Luminosity Dist.</p>
+<p class="text-2xl font-display font-bold text-slate-200">410 <span class="text-xs text-slate-500 font-sans">Mpc</span></p>
+<p class="text-[9px] text-slate-500 mt-1">z ≈ 0.09</p>
+</div>
+<div class="glass-effect rounded-custom p-5 flex flex-col justify-center border-l-4 border-l-accent">
+<p class="text-[10px] font-bold text-slate-500 uppercase tracking-tight mb-1">Final Spin</p>
+<p class="text-2xl font-display font-bold text-slate-200">0.67</p>
+<p class="text-[9px] text-slate-500 mt-1">Normalized a/M</p>
+</div>
+</section>
+<!-- Spectrogram -->
+<section class="col-span-8 glass-effect rounded-custom p-4 flex flex-col overflow-hidden">
+<div class="flex items-center justify-between mb-3 px-2">
+<h3 class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Time-Frequency Spectrogram (Q-Scan)</h3>
+<div class="flex gap-2">
+<div class="w-16 h-2 bg-gradient-to-r from-blue-900 via-accent to-white rounded-full"></div>
+</div>
+</div>
+<div class="flex-1 bg-slate-950/80 rounded-2xl relative overflow-hidden">
+<canvas class="w-full h-full" id="spectrogramCanvas"></canvas>
+<div class="absolute inset-0 pointer-events-none scientific-grid opacity-20"></div>
+</div>
+</section>
+</div>
+</div>
+</main>
+<!-- END: MainContent -->
+<!-- BEGIN: FooterStatus -->
+<footer class="bg-surface border-t border-border/50 px-8 py-3 flex items-center justify-between text-[9px] text-slate-600 font-mono">
+<div class="flex gap-8">
+<span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-green-500/50"></span> COMPUTE CLUSTER: LLO_V1_ONLINE</span>
+<span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-blue-500/50"></span> LATENCY: 4.2ms</span>
+<span>SAMPLING: 16384 Hz</span>
+</div>
+<div class="flex gap-4">
+<span>COORDINATES: RA 05h 22m | DEC -70° 01'</span>
+<span class="text-slate-400">VERSION 5.1.0-SIM</span>
+</div>
+</footer>
+<!-- END: FooterStatus -->
+<!-- BEGIN: VisualizationScripts -->
+<script>
+    window.addEventListener('load', () => {
+      // 1. Strain (Chirp) Plot
+      const sCanvas = document.getElementById('strainCanvas');
+      const sCtx = sCanvas.getContext('2d');
+      
+      const resize = (canvas) => {
+        canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+        canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+      };
+
+      resize(sCanvas);
+      
+      const drawChirp = () => {
+        const w = sCanvas.width;
+        const h = sCanvas.height;
+        sCtx.clearRect(0, 0, w, h);
+        
+        // Shadow/Glow effect
+        sCtx.shadowBlur = 15;
+        sCtx.shadowColor = 'rgba(56, 189, 248, 0.4)';
+        
+        sCtx.beginPath();
+        sCtx.strokeStyle = '#38bdf8';
+        sCtx.lineWidth = 2.5;
+        
+        for (let x = 0; x < w; x++) {
+          const progress = x / w;
+          // Chirp function: frequency increases over time
+          const frequency = 2 + (progress * 25);
+          const envelope = Math.pow(progress, 2.5) * 0.8 + 0.05;
+          const y = (h/2) + (Math.sin(progress * frequency * 20) * envelope * (h/2.2));
+          
+          if (x === 0) sCtx.moveTo(x, y);
+          else sCtx.lineTo(x, y);
+        }
+        sCtx.stroke();
+        sCtx.shadowBlur = 0;
+
+        // Baseline noise
+        sCtx.beginPath();
+        sCtx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+        sCtx.lineWidth = 1;
+        for (let x = 0; x < w; x++) {
+          const noise = (Math.random() - 0.5) * 20;
+          const y = (h/2) + noise;
+          if (x === 0) sCtx.moveTo(x, y);
+          else sCtx.lineTo(x, y);
+        }
+        sCtx.stroke();
+      };
+
+      drawChirp();
+
+      // 2. Spectrogram Plot
+      const spCanvas = document.getElementById('spectrogramCanvas');
+      const spCtx = spCanvas.getContext('2d');
+      resize(spCanvas);
+
+      const drawSpectrogram = () => {
+        const w = spCanvas.width;
+        const h = spCanvas.height;
+        spCtx.clearRect(0, 0, w, h);
+        
+        // Draw the characteristic "hook" of a merger
+        const gradient = spCtx.createLinearGradient(0, h, w, 0);
+        gradient.addColorStop(0, 'transparent');
+        gradient.addColorStop(0.5, 'rgba(56, 189, 248, 0.1)');
+        gradient.addColorStop(0.9, '#38bdf8');
+        gradient.addColorStop(1, '#ffffff');
+
+        spCtx.beginPath();
+        spCtx.strokeStyle = gradient;
+        spCtx.lineWidth = 12;
+        spCtx.lineCap = 'round';
+        
+        // Quadratic curve for the chirp spectrogram
+        spCtx.moveTo(w * 0.1, h * 0.9);
+        spCtx.quadraticCurveTo(w * 0.8, h * 0.85, w * 0.95, h * 0.1);
+        spCtx.stroke();
+        
+        // Fill some noise points
+        for(let i=0; i<400; i++) {
+            const rx = Math.random() * w;
+            const ry = Math.random() * h;
+            const size = Math.random() * 2;
+            spCtx.fillStyle = `rgba(56, 189, 248, ${Math.random() * 0.3})`;
+            spCtx.fillRect(rx, ry, size, size);
+        }
+      };
+
+      drawSpectrogram();
+
+      window.addEventListener('resize', () => {
+        resize(sCanvas);
+        resize(spCanvas);
+        drawChirp();
+        drawSpectrogram();
+      });
+    });
+  </script>
+<!-- END: VisualizationScripts -->
+</body></html>

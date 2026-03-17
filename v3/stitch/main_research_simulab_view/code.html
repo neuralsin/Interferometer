@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Simulab | Michelson Interferometer Research Grade</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: '#256af4',
+            surface: '#0f172a',
+            panel: '#1e293b',
+            border: '#334155'
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          borderRadius: {
+            'custom': '8px',
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-layout-styling">
+    body {
+      background-color: #0f172a;
+      color: #f1f5f9;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Custom scrollbar for control panel */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 10px;
+    }
+
+    /* Simulation Viewport Placeholder Stylings */
+    .viewport-grid {
+      background-image: radial-gradient(circle, #334155 1px, transparent 1px);
+      background-size: 30px 30px;
+    }
+
+    .laser-beam-red {
+      box-shadow: 0 0 15px 2px rgba(239, 68, 68, 0.6);
+      filter: blur(0.5px);
+    }
+
+    .interference-canvas {
+      background: radial-gradient(circle, #000 30%, #1e293b 100%);
+    }
+  </style>
+</head>
+<body class="flex flex-col">
+<!-- BEGIN: MainHeader -->
+<header class="h-14 border-b border-border bg-panel px-6 flex items-center justify-between z-10" data-purpose="global-navigation">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 bg-brand rounded-custom flex items-center justify-center">
+<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</div>
+<div>
+<h1 class="text-sm font-bold tracking-tight">SIMULAB RESEARCH</h1>
+<p class="text-[10px] text-slate-400 uppercase tracking-widest">Michelson Interferometer v4.2</p>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-500/20">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+        LIVE SIMULATION ACTIVE
+      </div>
+<button class="px-4 py-1.5 bg-brand hover:bg-brand/90 transition-colors text-white text-xs font-semibold rounded-custom">
+        EXPORT DATA
+      </button>
+</div>
+</header>
+<!-- END: MainHeader -->
+<!-- BEGIN: MainLayoutContainer -->
+<main class="flex-1 flex overflow-hidden">
+<!-- BEGIN: LeftPanel_3D_Viewport -->
+<section class="flex-1 relative bg-black overflow-hidden group" data-purpose="threejs-viewport">
+<div class="absolute inset-0 viewport-grid opacity-20"></div>
+<!-- Mock 3D Optical Setup Representation -->
+<div class="absolute inset-0 flex items-center justify-center">
+<!-- Breadboard Base -->
+<div class="relative w-[80%] h-[60%] bg-slate-800 rounded-lg border-2 border-slate-700 shadow-2xl flex items-center justify-center overflow-hidden">
+<!-- Optical Components (Conceptual Layout) -->
+<!-- Laser Housing -->
+<div class="absolute left-10 top-1/2 -translate-y-1/2 w-24 h-12 bg-slate-900 border border-slate-600 rounded flex flex-col items-center justify-center">
+<div class="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,1)]"></div>
+<span class="text-[8px] mt-1 text-slate-500 font-mono">LASER_SRC</span>
+</div>
+<!-- Beam Splitter -->
+<div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 bg-blue-400/20 border border-blue-400/50 backdrop-blur-sm rotate-45 flex items-center justify-center">
+<span class="text-[8px] text-blue-200 -rotate-45">B-S</span>
+</div>
+<!-- Mirror 1 (Vertical) -->
+<div class="absolute left-1/2 top-10 -translate-x-1/2 w-16 h-4 bg-slate-700 border-b-2 border-cyan-400 shadow-[0_4px_10px_rgba(34,211,238,0.2)]">
+<span class="block text-center text-[8px] text-slate-400 mt-0.5">M1_PIEZO</span>
+</div>
+<!-- Mirror 2 (Horizontal) -->
+<div class="absolute right-10 top-1/2 -translate-y-1/2 w-4 h-16 bg-slate-700 border-l-2 border-cyan-400 shadow-[-4px_0_10px_rgba(34,211,238,0.2)]">
+<div class="absolute top-1/2 left-0 -translate-y-1/2 -translate-x-full h-px w-2 bg-slate-600"></div>
+</div>
+<!-- Laser Beams (CSS Mockup) -->
+<!-- Main Beam -->
+<div class="absolute left-34 top-1/2 -translate-y-1/2 h-0.5 w-[calc(50%-34px)] bg-red-500/80 laser-beam-red"></div>
+<!-- Split Beam Vertical -->
+<div class="absolute left-1/2 bottom-[50%] -translate-x-1/2 w-0.5 h-[calc(50%-10px)] bg-red-500/80 laser-beam-red"></div>
+<!-- Split Beam Horizontal -->
+<div class="absolute left-1/2 top-1/2 -translate-y-1/2 w-[calc(50%-10px)] h-0.5 bg-red-500/80 laser-beam-red"></div>
+</div>
+</div>
+<!-- Viewport Overlays -->
+<div class="absolute top-4 left-4 flex flex-col gap-2">
+<div class="bg-black/60 backdrop-blur-md p-2 rounded-custom border border-white/10 text-[10px] font-mono">
+<p>CAM: PERSPECTIVE</p>
+<p>FPS: 60.0</p>
+<p>RENDER: WebGL2</p>
+</div>
+</div>
+<div class="absolute bottom-4 right-4 flex gap-2">
+<button class="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-custom border border-white/10 text-white">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+</section>
+<!-- END: LeftPanel_3D_Viewport -->
+<!-- BEGIN: RightPanel_Research_Dashboard -->
+<aside class="w-80 bg-panel border-l border-border flex flex-col overflow-hidden" data-purpose="research-control-dashboard">
+<div class="p-4 border-b border-border bg-slate-900/50">
+<h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">Research Controls</h2>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+<!-- BEGIN: Laser Source Section -->
+<div class="space-y-4" data-purpose="laser-source-controls">
+<h3 class="text-[11px] font-semibold text-brand flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-brand"></span> LASER SOURCE
+          </h3>
+<div class="space-y-3">
+<div>
+<label class="flex justify-between text-[10px] text-slate-400 mb-1">
+                WAVELENGTH <span>632.8 nm</span>
+</label>
+<input class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand" type="range"/>
+</div>
+<div>
+<label class="flex justify-between text-[10px] text-slate-400 mb-1">
+                POWER <span>5.0 mW</span>
+</label>
+<input class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand" type="range"/>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-[10px] text-slate-400 uppercase">Linewidth (MHz)</span>
+<input class="w-16 bg-slate-800 border-slate-700 text-xs text-brand text-right rounded-custom p-1 focus:ring-brand" type="number" value="1.5"/>
+</div>
+</div>
+</div>
+<!-- END: Laser Source Section -->
+<hr class="border-border"/>
+<!-- BEGIN: Arm Configuration Section -->
+<div class="space-y-4" data-purpose="arm-configuration">
+<h3 class="text-[11px] font-semibold text-brand flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-brand"></span> ARM CONFIGURATION
+          </h3>
+<div class="grid grid-cols-1 gap-4">
+<div class="bg-slate-800/50 p-3 rounded-custom border border-slate-700">
+<p class="text-[10px] text-slate-500 font-bold mb-2 uppercase">Arm 1 (Static)</p>
+<div class="flex items-center justify-between text-xs font-mono">
+<span class="text-slate-400">Length:</span>
+<span class="text-white">125.000 mm</span>
+</div>
+</div>
+<div class="bg-slate-800/50 p-3 rounded-custom border border-slate-700">
+<p class="text-[10px] text-slate-500 font-bold mb-2 uppercase">Arm 2 (Piezo Control)</p>
+<div class="space-y-2">
+<div class="flex items-center justify-between text-xs font-mono mb-1">
+<span class="text-slate-400">Position:</span>
+<span class="text-cyan-400">+1.24 pm</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<button class="bg-slate-700 hover:bg-slate-600 p-2 text-[10px] rounded-custom border border-slate-600 transition-all">- Δx</button>
+<button class="bg-slate-700 hover:bg-slate-600 p-2 text-[10px] rounded-custom border border-slate-600 transition-all">+ Δx</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- END: Arm Configuration Section -->
+<hr class="border-border"/>
+<!-- BEGIN: Environmental Factors Section -->
+<div class="space-y-4" data-purpose="environmental-factors">
+<h3 class="text-[11px] font-semibold text-brand flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-brand"></span> ENVIRONMENTAL
+          </h3>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<span class="text-[10px] text-slate-400">Vibration Isolation</span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-brand"></div>
+</label>
+</div>
+<div>
+<label class="flex justify-between text-[10px] text-slate-400 mb-1">
+                AMB. TEMP <span>22.4 °C</span>
+</label>
+<input class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand" type="range"/>
+</div>
+</div>
+</div>
+<!-- END: Environmental Factors Section -->
+</div>
+<!-- Action Footer -->
+<div class="p-4 border-t border-border bg-slate-900/50">
+<button class="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 text-red-500 text-[10px] font-bold uppercase tracking-widest rounded-custom transition-all">
+          Emergency Shutoff
+        </button>
+</div>
+</aside>
+<!-- END: RightPanel_Research_Dashboard -->
+</main>
+<!-- END: MainLayoutContainer -->
+<!-- BEGIN: Bottom_DetectorBar -->
+<footer class="h-48 border-t border-border bg-panel flex overflow-hidden shrink-0" data-purpose="detector-output-bar">
+<!-- Fringe Visualization -->
+<div class="w-64 border-r border-border p-3 flex flex-col gap-2 bg-black/40">
+<h4 class="text-[10px] font-bold text-slate-500 uppercase">Detector Image</h4>
+<div class="flex-1 rounded-custom interference-canvas border border-slate-700 relative overflow-hidden flex items-center justify-center">
+<!-- SVG used to simulate concentric interference fringes -->
+<svg class="w-32 h-32 opacity-80" viewbox="0 0 100 100">
+<circle class="animate-pulse" cx="50" cy="50" fill="none" r="45" stroke="#256af4" stroke-width="2"></circle>
+<circle cx="50" cy="50" fill="none" r="35" stroke="#256af4" stroke-width="4"></circle>
+<circle cx="50" cy="50" fill="none" r="25" stroke="#256af4" stroke-width="6"></circle>
+<circle cx="50" cy="50" fill="none" r="15" stroke="#256af4" stroke-width="8"></circle>
+<circle cx="50" cy="50" fill="#256af4" r="5"></circle>
+</svg>
+</div>
+</div>
+<!-- Live Metrics Graph -->
+<div class="flex-1 p-3 flex flex-col gap-2 overflow-hidden">
+<div class="flex justify-between items-center">
+<h4 class="text-[10px] font-bold text-slate-500 uppercase">Intensity Profile (Photodiode)</h4>
+<div class="flex gap-4 text-[10px] font-mono">
+<span class="text-brand">Peak: 0.98 AU</span>
+<span class="text-cyan-400">OPD: 15.2 nm</span>
+</div>
+</div>
+<div class="flex-1 rounded-custom bg-slate-950 border border-slate-700 relative flex items-end px-2 pb-2 gap-1 overflow-hidden">
+<!-- Mock Frequency Bars -->
+<div class="w-1 bg-brand/30 h-[20%]"></div>
+<div class="w-1 bg-brand/40 h-[35%]"></div>
+<div class="w-1 bg-brand/60 h-[60%]"></div>
+<div class="w-1 bg-brand/80 h-[85%]"></div>
+<div class="w-1 bg-brand/100 h-[100%]"></div>
+<div class="w-1 bg-brand/80 h-[70%]"></div>
+<div class="w-1 bg-brand/60 h-[40%]"></div>
+<div class="w-1 bg-brand/40 h-[25%]"></div>
+<div class="w-1 bg-brand/20 h-[15%]"></div>
+<div class="w-1 bg-brand/40 h-[35%]"></div>
+<div class="w-1 bg-brand/60 h-[55%]"></div>
+<div class="w-1 bg-brand/80 h-[90%]"></div>
+<div class="w-1 bg-brand/100 h-[95%]"></div>
+<div class="w-1 bg-brand/80 h-[65%]"></div>
+<div class="w-1 bg-brand/60 h-[45%]"></div>
+<div class="w-1 bg-brand/40 h-[30%]"></div>
+<div class="w-1 bg-brand/20 h-[10%]"></div>
+<!-- Repeat for effect -->
+<div class="w-1 bg-brand/40 h-[35%]"></div>
+<div class="w-1 bg-brand/60 h-[60%]"></div>
+<div class="w-1 bg-brand/80 h-[85%]"></div>
+<div class="w-1 bg-brand/100 h-[100%]"></div>
+<div class="w-1 bg-brand/80 h-[70%]"></div>
+<div class="w-1 bg-brand/60 h-[40%]"></div>
+<div class="w-1 bg-brand/40 h-[25%]"></div>
+<div class="w-1 bg-brand/20 h-[15%]"></div>
+<div class="w-1 bg-brand/40 h-[35%]"></div>
+<div class="w-1 bg-brand/60 h-[55%]"></div>
+<div class="w-1 bg-brand/80 h-[90%]"></div>
+<div class="w-1 bg-brand/100 h-[95%]"></div>
+<div class="w-1 bg-brand/80 h-[65%]"></div>
+<div class="w-1 bg-brand/60 h-[45%]"></div>
+<div class="w-1 bg-brand/40 h-[30%]"></div>
+<div class="w-1 bg-brand/20 h-[10%]"></div>
+<!-- Grid lines for graph -->
+<div class="absolute inset-0 flex flex-col justify-between p-2 pointer-events-none">
+<div class="border-t border-white/5 w-full"></div>
+<div class="border-t border-white/5 w-full"></div>
+<div class="border-t border-white/5 w-full"></div>
+</div>
+</div>
+</div>
+<!-- System Status -->
+<div class="w-48 border-l border-border p-3 flex flex-col gap-2">
+<h4 class="text-[10px] font-bold text-slate-500 uppercase">System Status</h4>
+<div class="flex-1 text-[10px] space-y-2 font-mono">
+<div class="flex justify-between">
+<span class="text-slate-500">Coherence:</span>
+<span class="text-emerald-400">99.2%</span>
+</div>
+<div class="flex justify-between">
+<span class="text-slate-500">Phase Err:</span>
+<span class="text-yellow-400">&lt; 0.01π</span>
+</div>
+<div class="flex justify-between">
+<span class="text-slate-500">S/N Ratio:</span>
+<span class="text-emerald-400">42 dB</span>
+</div>
+<div class="mt-4 pt-2 border-t border-slate-700">
+<button class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-1 rounded border border-slate-600 transition-colors">CALIBRATE</button>
+</div>
+</div>
+</div>
+</footer>
+<!-- END: Bottom_DetectorBar -->
+<!-- BEGIN: CanvasInitialization -->
+<script data-purpose="detector-animation-logic">
+    // This script placeholder demonstrates how one might handle real-time UI updates
+    // For this static generation, we use CSS animations for the "pulse" effects.
+    console.log("Simulab Interface Initialized: System Ready.");
+  </script>
+<!-- END: CanvasInitialization -->
+</body></html>
