@@ -1,38 +1,53 @@
 /**
- * Basic Interference Physics (Beginner Mode)
- * 
- * Uses the ideal two-beam interference equation:
- *   I(x,y) = 2 * I0 * [1 + cos(k * Δx)]
- * 
- * where k = 2π/λ and Δx is the optical path difference.
- * No noise, no coherence effects, no beam profile — pure pedagogy.
+ * Basic Interference Physics
+ *
+ * Uses the partially-coherent two-beam interference equation:
+ *   I(x,y) = I₁ + I₂ + 2√(I₁I₂) · V(Δ) · cos(k · Δ)
+ *
+ * where:
+ *   k = 2π/λ
+ *   V(Δ) = exp(-π · |Δ| · Δν / c)  — fringe visibility from source linewidth
+ *   Δ = opdCenter + 2·(tiltX·x + tiltY·y)
+ *
+ * This properly models:
+ *   - Linewidth reducing fringe contrast at large OPD
+ *   - Mirror tilt producing straight-line fringes
+ *   - Wavelength determining fringe spacing
  */
 
+const C_LIGHT = 299792458;
+
 /**
- * Calculate intensity at a single point given OPD.
- * @param {number} wavelength - Wavelength in meters
- * @param {number} opd - Optical path difference in meters
- * @param {number} i0 - Base intensity (default 1.0)
- * @returns {number} Normalized intensity 0–1
+ * Fringe visibility from temporal coherence (Wiener-Khinchin).
+ * For a Lorentzian line:  V = exp(-π·|Δ|·Δν/c)
  */
-export const calculateIntensity = (wavelength, opd, i0 = 1.0) => {
-  const k = (2 * Math.PI) / wavelength;
-  return 2 * i0 * (1 + Math.cos(k * opd));
+const temporalVisibility = (opd, linewidth) => {
+  if (linewidth <= 0) return 1.0;
+  return Math.exp(-Math.PI * Math.abs(opd) * linewidth / C_LIGHT);
 };
 
 /**
- * Generate a 2D fringe pattern array for the detector screen.
- * Models circular fringes from a simple plane-wave interferometer
- * with optional mirror tilt for straight-line fringes.
+ * Calculate intensity at a single point given OPD.
+ * Includes coherence envelope from linewidth.
+ */
+export const calculateIntensity = (wavelength, opd, linewidth = 0, i0 = 1.0) => {
+  const k = (2 * Math.PI) / wavelength;
+  const V = temporalVisibility(opd, linewidth);
+  return i0 * (1 + V * Math.cos(k * opd));
+};
+
+/**
+ * Generate a 2D fringe pattern with coherence effects.
  *
  * @param {Object} params
  * @param {number} params.wavelength - λ in meters
- * @param {number} params.opdCenter - Central OPD in meters (2 * arm difference)
- * @param {number} params.tiltX - Mirror tilt about X axis (radians)
- * @param {number} params.tiltY - Mirror tilt about Y axis (radians)
- * @param {number} params.resolution - Grid size N (NxN)
- * @param {number} params.detectorSize - Physical detector size in meters (default 0.01)
- * @returns {Float32Array} Intensity values, row-major, length N*N
+ * @param {number} params.opdCenter - Central OPD (2 × arm difference)
+ * @param {number} params.tiltX - Mirror tilt about X (radians)
+ * @param {number} params.tiltY - Mirror tilt about Y (radians)
+ * @param {number} params.resolution - Grid N (N×N)
+ * @param {number} params.detectorSize - Physical size (m), default 0.01
+ * @param {number} params.linewidth - Source linewidth Δν (Hz), default 0
+ * @returns {Float32Array} Intensity [0,1], length N×N
  */
 export const generateFringePattern = ({
   wavelength,
@@ -41,6 +56,7 @@ export const generateFringePattern = ({
   tiltY = 0,
   resolution = 256,
   detectorSize = 0.01,
+  linewidth = 0,
 }) => {
   const N = resolution;
   const k = (2 * Math.PI) / wavelength;
@@ -55,8 +71,12 @@ export const generateFringePattern = ({
       // OPD varies across detector due to mirror tilt
       const opdLocal = opdCenter + 2 * (tiltX * x + tiltY * y);
 
-      // Ideal interference: I = 2 I0 [1 + cos(k * Δ)]
-      const intensity = 0.5 * (1 + Math.cos(k * opdLocal));
+      // Visibility from coherence envelope
+      const V = temporalVisibility(opdLocal, linewidth);
+
+      // Partially-coherent interference:
+      // I = 0.5 * (1 + V·cos(k·Δ))
+      const intensity = 0.5 * (1 + V * Math.cos(k * opdLocal));
 
       data[j * N + i] = intensity;
     }
@@ -66,43 +86,40 @@ export const generateFringePattern = ({
 };
 
 /**
+ * Compute detection probabilities for both output ports.
+ * Port 1 (constructive):  P₁ = cos²(δ/2)
+ * Port 2 (destructive):   P₂ = sin²(δ/2)
+ * where δ = k·OPD
+ */
+export const detectionProbabilities = (wavelength, opd) => {
+  const delta = (2 * Math.PI / wavelength) * opd;
+  const p1 = Math.cos(delta / 2) ** 2;
+  const p2 = Math.sin(delta / 2) ** 2;
+  return { p1, p2 };
+};
+
+/**
  * Convert wavelength in meters to approximate visible color (hex string).
- * @param {number} wavelength - in meters
- * @returns {string} hex color string
  */
 export const wavelengthToColor = (wavelength) => {
   const nm = wavelength * 1e9;
   let r = 0, g = 0, b = 0;
 
-  if (nm >= 380 && nm < 440) {
-    r = -(nm - 440) / (440 - 380);
-    b = 1.0;
-  } else if (nm >= 440 && nm < 490) {
-    g = (nm - 440) / (490 - 440);
-    b = 1.0;
-  } else if (nm >= 490 && nm < 510) {
-    g = 1.0;
-    b = -(nm - 510) / (510 - 490);
-  } else if (nm >= 510 && nm < 580) {
-    r = (nm - 510) / (580 - 510);
-    g = 1.0;
-  } else if (nm >= 580 && nm < 645) {
-    r = 1.0;
-    g = -(nm - 645) / (645 - 580);
-  } else if (nm >= 645 && nm <= 780) {
-    r = 1.0;
-  }
+  if (nm >= 380 && nm < 440) { r = -(nm - 440) / (440 - 380); b = 1; }
+  else if (nm >= 440 && nm < 490) { g = (nm - 440) / (490 - 440); b = 1; }
+  else if (nm >= 490 && nm < 510) { g = 1; b = -(nm - 510) / (510 - 490); }
+  else if (nm >= 510 && nm < 580) { r = (nm - 510) / (580 - 510); g = 1; }
+  else if (nm >= 580 && nm < 645) { r = 1; g = -(nm - 645) / (645 - 580); }
+  else if (nm >= 645 && nm <= 780) { r = 1; }
 
-  // Intensity falloff at edges of visible spectrum
   let factor = 1.0;
   if (nm >= 380 && nm < 420) factor = 0.3 + 0.7 * (nm - 380) / (420 - 380);
   else if (nm >= 645 && nm <= 780) factor = 0.3 + 0.7 * (780 - nm) / (780 - 645);
-  else if (nm < 380 || nm > 780) factor = 0.0;
+  else if (nm < 380 || nm > 780) factor = 0;
 
   r = Math.round(255 * Math.pow(r * factor, 0.8));
   g = Math.round(255 * Math.pow(g * factor, 0.8));
   b = Math.round(255 * Math.pow(b * factor, 0.8));
 
-  const hex = '#' + [r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('');
-  return hex;
+  return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
 };

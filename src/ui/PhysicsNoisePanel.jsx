@@ -128,7 +128,14 @@ const PhysicsNoisePanel = () => {
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <button className="btn-ghost" onClick={() => useSimulationStore.getState().resetToDefaults()}>RESET_DEFAULTS</button>
-          <button className="btn-primary">APPLY_CONSTANTS</button>
+          <button className="btn-primary" onClick={() => {
+            const s = useSimulationStore.getState();
+            const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'physics_constants.json'; a.click();
+            URL.revokeObjectURL(url);
+          }}>EXPORT_CONSTANTS</button>
         </div>
       </div>
 
@@ -196,10 +203,10 @@ const PhysicsNoisePanel = () => {
               <div className="viewport-grid" style={{ position: 'absolute', inset: 0, opacity: 0.1 }} />
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 40px 48px', gap: 6 }}>
                 {noiseBars.map((bar, i) => (
-                  <div key={i} className="wave-bar" style={{
+                  <div key={i} style={{
                     width: 4, height: `${bar.h}%`,
                     background: `rgba(255,255,255,${bar.o * 0.5})`,
-                    borderRadius: 2, animationDelay: `${bar.delay}s`,
+                    borderRadius: 2, transition: 'height 300ms ease',
                   }} />
                 ))}
               </div>
@@ -309,11 +316,13 @@ const PhysicsNoisePanel = () => {
                 <option value={512}>HD-512</option>
               </select>
             } />
-          <DetectorRow icon={<BoltSvg />} label="Cooling Target" sublabel="CRYO_STATE: 4.2K"
+          <DetectorRow icon={<BoltSvg />} label="Thermal State" sublabel={`T_ENV: ${(state.envTemperature - 273.15).toFixed(1)}°C`}
             right={
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', padding: '4px 12px', borderRadius: 'var(--radius-full)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#fff', letterSpacing: '0.15em' }}>STABLE</span>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', animation: 'ping 1.5s infinite' }} />
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#fff', letterSpacing: '0.15em' }}>
+                  {state.thermalDriftEnabled ? 'DRIFT_ON' : 'STABLE'}
+                </span>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: state.thermalDriftEnabled ? '#f84' : '#fff' }} />
               </div>
             } />
         </section>
@@ -323,7 +332,7 @@ const PhysicsNoisePanel = () => {
       <div style={{ paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 32, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.15em' }}>
           <StatusDot label="ENGINE: COMPUTING" opacity={0.4} />
-          <StatusDot label="LAST SYNC: 2m AGO" opacity={0.2} />
+          <span>OPD: {(2 * (Math.sqrt(state.mirror1PosX**2 + state.mirror1PosZ**2) - Math.sqrt(state.mirror2PosX**2 + state.mirror2PosZ**2)) * 1e9).toFixed(1)} nm</span>
           <span>KERNEL: v18.4.3-STOCHASTIC</span>
         </div>
         <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.15em' }}>

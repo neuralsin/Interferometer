@@ -491,17 +491,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
   75%, 100% { transform: scale(2); opacity: 0; }
 }
 
-/* ---- Wave Bar Animation ---- */
-@keyframes wave-flow {
-  0%, 100% { transform: scaleY(1); opacity: 0.3; }
-  50% { transform: scaleY(1.5); opacity: 0.8; }
-}
-
-.wave-bar {
-  animation: wave-flow 2s ease-in-out infinite;
-  transform-origin: bottom;
-}
-
 /* ---- Viewport Overlay ---- */
 .viewport-overlay {
   position: absolute;

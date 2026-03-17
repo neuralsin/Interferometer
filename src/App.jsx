@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import SceneManager from './scene/SceneManager.jsx';
 import Sidebar from './ui/Sidebar.jsx';
 import BottomBar from './ui/BottomBar.jsx';
@@ -6,7 +6,10 @@ import PhysicsNoisePanel from './ui/PhysicsNoisePanel.jsx';
 import QuantumPanel from './ui/QuantumPanel.jsx';
 import AnalyticsPanel from './ui/AnalyticsPanel.jsx';
 import useSimulationStore from './store/simulationStore.js';
-import { exportCSV, exportImage, exportJSON } from './physics/dataExport.js';
+import { exportCSV, exportJSON } from './physics/dataExport.js';
+import { detectionProbabilities } from './physics/basicInterference.js';
+import { fringeVisibility } from './physics/coherenceModel.js';
+import { photonCount, phaseSNR } from './physics/quantumModel.js';
 
 const TABS = [
   { id: 'sim', label: 'SIMULATION' },
@@ -29,7 +32,67 @@ const DownloadIcon = () => (
   </svg>
 );
 
-/** Beginner Bottom Bar with wavelength + geometry sliders */
+/** Detection Stats Overlay — replaces System Telemetry */
+const DetectionOverlay = ({ isResearch }) => {
+  const state = useSimulationStore();
+  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
+  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
+  const opd = 2 * (armX - armY);
+  const { p1, p2 } = detectionProbabilities(state.wavelength, opd);
+  const vis = fringeVisibility(opd, state.laserLinewidth);
+  const N = photonCount(state.laserPower, state.wavelength, state.detectorExposureTime);
+  // Simulated detection counts proportional to theoretical probabilities
+  const n1 = Math.round(p1 * N * 1e-10);
+  const n2 = Math.round(p2 * N * 1e-10);
+  const coincidences = Math.round(Math.min(n1, n2) * 0.001);
+
+  return (
+    <div className="viewport-overlay" style={{ maxWidth: isResearch ? 220 : 180 }}>
+      <p style={{ color: '#fff', fontWeight: 700, marginBottom: 6, fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+        Detected Counts
+      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+        <span>Det_1 (N₁):</span><span style={{ color: '#fff' }}>{n1.toLocaleString()}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+        <span>Det_2 (N₂):</span><span style={{ color: '#fff' }}>{n2.toLocaleString()}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+        <span>Coinc (Nc):</span><span style={{ color: '#fff' }}>{coincidences}</span>
+      </div>
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 8 }}>
+        <p style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Theory</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>P₁ (cos²δ/2):</span><span style={{ color: '#fff' }}>{(p1 * 100).toFixed(1)}%</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>P₂ (sin²δ/2):</span><span style={{ color: '#fff' }}>{(p2 * 100).toFixed(1)}%</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Visibility:</span><span style={{ color: '#fff' }}>{(vis * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+      {isResearch && (
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 8 }}>
+          <p style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            Actual / Expected
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>N₁/N_total:</span><span style={{ color: '#fff' }}>{(n1 / (n1 + n2 + 1) * 100).toFixed(1)}%</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Δ(actual-theory):</span>
+            <span style={{ color: Math.abs(n1 / (n1 + n2 + 1) - p1) < 0.05 ? '#4f4' : '#f84' }}>
+              {((n1 / (n1 + n2 + 1) - p1) * 100).toFixed(2)}%
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** Beginner Bottom Bar */
 const BeginnerBottomBar = () => {
   const wavelength = useSimulationStore((s) => s.wavelength);
   const mirror2PosZ = useSimulationStore((s) => s.mirror2PosZ);
@@ -41,37 +104,99 @@ const BeginnerBottomBar = () => {
 
   return (
     <footer style={{ padding: '0 24px 24px', display: 'flex', gap: 24, flexShrink: 0 }}>
-      <div className="glass-card" style={{ flex: 1, borderRadius: 'var(--radius-high)', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="glass-card" style={{ flex: 1, borderRadius: 'var(--radius-high)', padding: '20px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <h4 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Laser Engine λ</h4>
           <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: '#fff', fontWeight: 700 }}>{(wavelength * 1e9).toFixed(2)} nm</span>
         </div>
         <input type="range" min={380} max={780} step={0.1} value={wavelength * 1e9}
           onChange={(e) => setParam('wavelength', parseFloat(e.target.value) * 1e-9)} />
-        <p style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.5, fontStyle: 'italic' }}>Adjust subatomic source wavelength.</p>
       </div>
-      <div className="glass-card" style={{ flex: 1, borderRadius: 'var(--radius-high)', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="glass-card" style={{ flex: 1, borderRadius: 'var(--radius-high)', padding: '20px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <h4 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Geometry Offset Δd</h4>
           <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: '#fff', fontWeight: 700 }}>{(opd * 1e6).toFixed(2)} μm</span>
         </div>
         <input type="range" min={50} max={500} step={0.001} value={Math.abs(mirror2PosZ) * 1e3}
           onChange={(e) => setParam('mirror2PosZ', -parseFloat(e.target.value) * 1e-3)} />
-        <p style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.5, fontStyle: 'italic' }}>Actuate primary arm micro-adjustment.</p>
       </div>
     </footer>
   );
 };
+
+/** Component Toolbar — add optical elements to the setup */
+const ComponentToolbar = () => {
+  const setParam = useSimulationStore((s) => s.setParam);
+  const compensatorEnabled = useSimulationStore((s) => s.compensatorEnabled);
+
+  return (
+    <div style={{
+      position: 'absolute', top: 12, right: 12, zIndex: 10,
+      display: 'flex', gap: 6,
+    }}>
+      <ToolbarBtn label="M1" tooltip="Toggle Mirror 1 tip"
+        onClick={() => {
+          const s = useSimulationStore.getState();
+          setParam('mirror1Tip', s.mirror1Tip === 0 ? 3e-4 : 0);
+        }} />
+      <ToolbarBtn label="M2" tooltip="Toggle Mirror 2 tip"
+        onClick={() => {
+          const s = useSimulationStore.getState();
+          setParam('mirror2Tip', s.mirror2Tip === 0 ? 2e-4 : 0);
+        }} />
+      <ToolbarBtn label="CP" tooltip="Toggle Compensator Plate" active={compensatorEnabled}
+        onClick={() => setParam('compensatorEnabled', !compensatorEnabled)} />
+      <ToolbarBtn label="GW" tooltip="Toggle GW injection"
+        onClick={() => {
+          const s = useSimulationStore.getState();
+          setParam('gwEnabled', !s.gwEnabled);
+        }} />
+      <ToolbarBtn label="🔊" tooltip="Toggle seismic noise"
+        onClick={() => {
+          const s = useSimulationStore.getState();
+          setParam('seismicNoiseEnabled', !s.seismicNoiseEnabled);
+        }} />
+      <ToolbarBtn label="🌡" tooltip="Toggle thermal drift"
+        onClick={() => {
+          const s = useSimulationStore.getState();
+          setParam('thermalDriftEnabled', !s.thermalDriftEnabled);
+        }} />
+    </div>
+  );
+};
+
+const ToolbarBtn = ({ label, tooltip, onClick, active }) => (
+  <button onClick={onClick} title={tooltip} style={{
+    padding: '5px 10px', fontSize: 9, fontWeight: 700,
+    background: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)',
+    border: `1px solid rgba(255,255,255,${active ? 0.4 : 0.1})`,
+    borderRadius: 6, cursor: 'pointer', color: '#fff',
+    fontFamily: 'var(--font-mono)', letterSpacing: '0.05em',
+    transition: 'all 150ms',
+  }}>
+    {label}
+  </button>
+);
 
 const App = () => {
   const isResearchMode = useSimulationStore((s) => s.isResearchMode);
   const simulationPaused = useSimulationStore((s) => s.simulationPaused);
   const toggleResearchMode = useSimulationStore((s) => s.toggleResearchMode);
   const setParam = useSimulationStore((s) => s.setParam);
-  const wavelength = useSimulationStore((s) => s.wavelength);
   const [activeTab, setActiveTab] = useState('sim');
+  const viewportRef = useRef(null);
 
-  const handleExport = () => exportCSV(useSimulationStore.getState());
+  const handleFullscreen = useCallback(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      el.requestFullscreen().catch(() => {});
+    }
+  }, []);
+
+  const handleExport = () => exportJSON(useSimulationStore.getState());
 
   return (
     <div className="app-layout">
@@ -81,7 +206,7 @@ const App = () => {
           <div style={{
             width: 36, height: 36, border: '1px solid rgba(255,255,255,0.2)',
             borderRadius: 'var(--radius-high)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(255,255,255,0.05)', boxShadow: '0 0 15px rgba(226,232,240,0.2)',
+            background: 'rgba(255,255,255,0.05)',
           }}>
             <FlaskIcon />
           </div>
@@ -93,8 +218,6 @@ const App = () => {
               {isResearchMode ? 'Quantum Interferometry Suite v4.2' : 'Michelson Interferometer v4.2'}
             </p>
           </div>
-
-          {/* Tab navigation (research mode only) */}
           {isResearchMode && (
             <nav style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 24, background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-high)', padding: 3, border: '1px solid rgba(255,255,255,0.06)' }}>
               {TABS.map((tab) => (
@@ -110,24 +233,20 @@ const App = () => {
             </nav>
           )}
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Play/Pause toggle (replaces static "LIVE SIMULATION ACTIVE") */}
           {isResearchMode && (
             <>
               <button onClick={() => setParam('simulationPaused', !simulationPaused)} className="status-pill" style={{
                 cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)',
               }}>
                 <span className="status-dot" style={{ opacity: simulationPaused ? 0.3 : 1 }} />
-                {simulationPaused ? 'SIMULATION PAUSED' : 'STABLE_OSCILLATION'}
+                {simulationPaused ? 'PAUSED' : 'STABLE_OSCILLATION'}
               </button>
               <button className="btn-primary" onClick={handleExport} style={{ fontSize: 8, padding: '6px 16px', gap: 6 }}>
                 <DownloadIcon /> Export Data
               </button>
             </>
           )}
-
-          {/* Mode switch button */}
           <button onClick={toggleResearchMode} style={{
             padding: '8px 20px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
             letterSpacing: '0.12em', cursor: 'pointer', borderRadius: 'var(--radius-high)',
@@ -143,57 +262,39 @@ const App = () => {
 
       {/* ===== CONTENT ===== */}
       {!isResearchMode ? (
-        /* BEGINNER MODE */
         <>
           <div className="app-main">
-            <section className="app-viewport glass-card" style={{ borderRadius: 'var(--radius-high)' }}>
+            <section ref={viewportRef} className="app-viewport glass-card" style={{ borderRadius: 'var(--radius-high)' }}>
               <div className="viewport-grid" style={{ position: 'absolute', inset: 0, opacity: 0.2 }} />
               <SceneManager />
-              <div className="viewport-overlay">
-                <p style={{ color: '#fff', fontWeight: 700, marginBottom: 4, fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase' }}>System_Telemetry</p>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24 }}>
-                  <span>VECTOR:</span><span style={{ color: '#fff' }}>XYZ_AXIS</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24 }}>
-                  <span>SOURCE:</span><span style={{ color: '#fff' }}>{(wavelength * 1e9).toFixed(0)} NM</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24 }}>
-                  <span>SAMPLING:</span><span style={{ color: '#fff' }}>12.5 GS/s</span>
-                </div>
-              </div>
+              <DetectionOverlay isResearch={false} />
+              <button className="btn-ghost" onClick={handleFullscreen} style={{
+                position: 'absolute', bottom: 16, right: 16, padding: 8, borderRadius: 'var(--radius-full)', zIndex: 5,
+              }}>
+                <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                    strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+              </button>
             </section>
             <aside className="app-sidebar">
-              <div className="app-sidebar-inner glass-card">
-                <Sidebar />
-              </div>
+              <div className="app-sidebar-inner glass-card"><Sidebar /></div>
             </aside>
           </div>
           <BeginnerBottomBar />
         </>
       ) : (
-        /* RESEARCH MODE */
         <>
           {activeTab === 'sim' && (
             <>
               <div className="app-main">
-                <section className="app-viewport glass-card" style={{ borderRadius: 'var(--radius-high)' }}>
+                <section ref={viewportRef} className="app-viewport glass-card" style={{ borderRadius: 'var(--radius-high)', position: 'relative' }}>
                   <div className="viewport-grid" style={{ position: 'absolute', inset: 0, opacity: 0.2 }} />
                   <SceneManager />
-                  <div className="viewport-overlay">
-                    <p style={{ color: '#fff', fontWeight: 700, marginBottom: 4, fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase' }}>System_Telemetry</p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24 }}>
-                      <span>VECTOR:</span><span style={{ color: '#fff' }}>XYZ_AXIS</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24 }}>
-                      <span>SAMPLING:</span><span style={{ color: '#fff' }}>12.5 GS/s</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24 }}>
-                      <span>LATENCY:</span><span style={{ color: '#fff' }}>0.04 ms</span>
-                    </div>
-                  </div>
-                  <button className="btn-ghost" style={{
-                    position: 'absolute', bottom: 24, right: 24, padding: 10,
-                    borderRadius: 'var(--radius-full)',
+                  <DetectionOverlay isResearch={true} />
+                  <ComponentToolbar />
+                  <button className="btn-ghost" onClick={handleFullscreen} style={{
+                    position: 'absolute', bottom: 16, right: 16, padding: 8, borderRadius: 'var(--radius-full)', zIndex: 5,
                   }}>
                     <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
@@ -202,9 +303,7 @@ const App = () => {
                   </button>
                 </section>
                 <aside className="app-sidebar">
-                  <div className="app-sidebar-inner glass-card">
-                    <Sidebar />
-                  </div>
+                  <div className="app-sidebar-inner glass-card"><Sidebar /></div>
                 </aside>
               </div>
               <BottomBar />
@@ -231,7 +330,10 @@ const App = () => {
           <span>Kernel: v18.4.3-Stochastic</span>
           <span>GPU_Accel: True</span>
         </div>
-        <span>CID: 0x2A88F4...119D</span>
+        <a href="https://github.com/neuralsin" target="_blank" rel="noopener noreferrer"
+          style={{ color: 'rgba(255,255,255,0.15)', textDecoration: 'none', fontSize: 8, letterSpacing: '0.2em' }}>
+          github.com/neuralsin
+        </a>
       </footer>
     </div>
   );

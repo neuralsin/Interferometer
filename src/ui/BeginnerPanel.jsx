@@ -3,7 +3,7 @@ import useSimulationStore from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor } from '../physics/basicInterference.js';
 
 /** Reusable V3-styled slider row */
-const SliderControl = ({ label, unit, value, min, max, step, onChange, formatValue }) => {
+export const SliderControl = ({ label, unit, value, min, max, step, onChange, formatValue }) => {
   const displayValue = formatValue ? formatValue(value) : value;
   return (
     <div className="slider-row">
@@ -27,6 +27,7 @@ const BeginnerPanel = () => {
   const mirror2PosZ = useSimulationStore((s) => s.mirror2PosZ);
   const mirror1Tip = useSimulationStore((s) => s.mirror1Tip);
   const mirror2Tip = useSimulationStore((s) => s.mirror2Tip);
+  const laserLinewidth = useSimulationStore((s) => s.laserLinewidth);
   const canvasRef = useRef(null);
 
   const armX = Math.sqrt(mirror1PosX ** 2);
@@ -59,6 +60,7 @@ const BeginnerPanel = () => {
         tiltY: mirror2Tip,
         resolution,
         detectorSize: 0.01,
+        linewidth: laserLinewidth,
       });
 
       // Color from wavelength
@@ -183,5 +185,4 @@ const BeginnerPanel = () => {
   );
 };
 
-export { SliderControl };
 export default BeginnerPanel;

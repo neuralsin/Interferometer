@@ -51,6 +51,7 @@ export const computeFringePattern = (state, elapsed = 0) => {
       tiltY: state.mirror2Tip || 0,
       resolution: state.detectorArrayWidth || 256,
       detectorSize: 0.01,
+      linewidth: state.laserLinewidth || 0,
     });
   }
 
