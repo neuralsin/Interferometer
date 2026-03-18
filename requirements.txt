@@ -1,23 +1,14 @@
-# Quantum Optics Simulator - System Dependencies
-# Note: This is a hybrid React + WebAssembly project, not a Python project. 
-# Therefore, dependencies are system-level and NPM-level, rather than PyPI packages.
+# Node.js dependencies
+# This is a Vite + React project.
+# To install, simply run `npm install` in this directory.
 
-# --- Core Tools ---
-Node.js >= 18.0.0
-npm >= 9.0.0
+react==18.3.1
+react-dom==18.3.1
+three==0.170.0
+zustand==5.0.0
+gsap==3.12.5
 
-# --- WebAssembly Build Tools ---
-CMake >= 3.14
-Emscripten SDK (emsdk) >= 3.0.0
-C++17 Compatible Compiler (GCC/Clang/MSVC)
-
-# --- Frontend Package Dependencies (Installed via `npm install`) ---
-# (See package.json for exact version constraints)
-react
-react-dom
-three
-zustand
-gsap
-vite
-@vitejs/plugin-react
-vite-plugin-glsl
+# Development dependencies
+@vitejs/plugin-react==4.3.4
+vite==6.0.0
+vite-plugin-glsl==1.3.0

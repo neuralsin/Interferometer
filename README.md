@@ -1,47 +1,86 @@
-# Quantum Optics Simulator
+# Simulab Research: Quantum Interferometry Suite 
 
-A high-fidelity, real-time physics engine and web-based visualizer for advanced interferometry and quantum optics experiments. Features dynamic wave propagation, real-time fringe pattern rendering, and robust quantum state telemetry.
+A comprehensive, physics-accurate simulation suite for quantum and classical interferometry. This web-based application allows researchers and students to explore wave optics, quantum metrology, and gravitational wave astronomy through real-time, mathematically rigorous simulations.
 
-## Supported Interferometers
+## 🚀 Features
 
-The simulator currently supports (or is in the process of supporting) three primary experimental setups, selectable from the top navigation bar:
+### 1. Classical Interferometry (Wave Optics)
+- **Michelson Interferometer**: High-fidelity optical layout tracing, adjustable arm lengths, mirror tilt/displacement, and gas cell insertion for refractive index experiments.
+- **Mach-Zehnder Interferometer (MZI)**: Emphasizes quantum superposition, true optical path differences, and probabilistic beam splitting.
+- **Sagnac Interferometer**: Clean pentagonal loop geometry for demonstrating the Sagnac effect, rotational phase shifts, and gyroscope principles.
 
-### 1. Mach-Zehnder Interferometer (MZI)
-A foundational amplitude-splitting interferometer.
-- **Components:** Laser source, two beam splitters (BS1, BS2), and two fully reflective mirrors (M1, M2).
-- **Physics Demonstrated:** Quantum superposition, single-photon interference, Phase density profiling.
-- **Features:** 
-  - Draggable, snappable components on a dynamic 2D canvas grid.
-  - Component toggling (enabling/disabling mirrors or beam splitters to break interference paths).
-  - High-speed statistical photon batch firing (x50, x500) representing probability amplitudes.
+### 2. Subatomic (Quantum Metrology)
+- **Phase Space Analysis**: Real-time Wigner phase space plotting and squeeze ellipse visualization.
+- **Quantum Noise Limits**: Live calculations for Shot Noise Limit (SQL), Squeezed Sensitivity, and the Heisenberg Limit.
+- **Precision Optimization**: Built-in squeeze optimizer, calculating the exact required squeezing parameter (r) for maximum Signal-to-Noise Ratio (SNR).
+- **Measurement Diagnostics**: Subatomic parameter readouts including displacement/strain precision, quantum state purity, and entanglement metrics.
 
-### 2. Michelson Interferometer
-Developed from historical experiments mapping ether drift and refractive indices.
-- **Components:** Laser, stationary half-silvered mirror (BS), fixed mirror (M1), adjustable mirror (M2), and an inserted Gas Cell.
-- **Physics Demonstrated:** Refractometry via gas cell index properties, spatial coherence, constructive/destructive halos.
-- **Features:**
-  - Gas Cell Simulation: Swap between Air, Helium, and Argon with variable pressure (atm) and cell length modifying the speed of light ($v = c/n$) in the path.
-  - Dedicated Wave Propagation Canvas and Fringe Canvas.
-  - Granular control over mirror displacement ($\Delta d$) down to $\mu m$ ranges.
+### 3. Astronomical (LIGO GW Analytics)
+- **Gravitational Wave Astronomy**: Simulates binary black hole (BBH) and neutron star (BNS) mergers using General Relativity formulas (Peters' formula, Thorne's estimates).
+- **Detection Performance**: Computes matched filter SNR, detection horizons, and expected event rates based on LIGO O3 observation data.
+- **Source Properties**: Calculates chirp mass, orbital frequency at ISCO, final spin (Boyle-Buonanno), and peak luminosity. 
+- **Time-Frequency Analysis**: Live Q-scan spectrogram showing the characteristic "chirp" signal ($f(t) \propto (t_c - t)^{-3/8}$).
+- **Noise Budgets**: Displays the realistic frequency-domain sensitivity curve.
 
-### 3. Sagnac Interferometer (Fibre-Optic Gyroscope)
-*(In Development - Phase 2)*
-A rotational loop interferometer demonstrating the Sagnac effect, foundational for modern optical gyroscopes.
-- **Components:** Rotating disk platform, fiber loops (or polygonal mirror paths), CW and CCW laser paths, detector.
-- **Physics Demonstrated:** Relativistic phase shifts induced by rotation, $C'$ and $C''$ speed of light observer differences.
-- **Features:** Variable loop radius, number of loops, and tangential rotational velocity.
+## 🛠 Tech Stack
 
----
+- **Frontend**: React 18, HTML5 Canvas API (for high-performance particle/wave rendering)
+- **State Management**: Zustand
+- **Build Tool**: Vite
+- **Styling**: Vanilla CSS (with robust Dark/Light mode support)
+- **Physics Engine**: Custom deterministic JS backend (`src/physics/`)
 
-## Technical Stack & Architecture
-- **Frontend Framework:** React (Vite)
-- **State Management:** Zustand (Global zero-lag parameter mutation)
-- **Styling:** Custom Vanilla CSS with Light/Dark mode theming (`[data-theme="light"]`). Glassmorphic UI overlays.
-- **Rendering:** Highly optimized HTML5 Canvas API arrays with requestAnimationFrame loop synchronization. 
+## 🏁 Quick Start
 
-## Physics Engines (Backend)
-- `basicInterference.js`: Core fringe generation, wavelength color scaling, OPD detection probabilities.
-- `coherenceModel.js`: Visibility metrics, coherence length calculation, and Lorentzian Power Spectral Density arrays.
-- `gaussianBeam.js`: Beam waist, Rayleigh range, Gouy phase shifts.
-- `noiseGenerator.js`: Seismic jitter models, Wiener Phase noise integration.
-- `quantumModel.js`: Photon count estimations, Phase SNR (Signal-to-Noise Ratio), shot-noise limits, and squeezing factors.
+### Prerequisites
+Make sure you have [Node.js](https://nodejs.org/) installed (v18+ recommended).
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone <repo-url>
+   cd qthack
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+4. Open your browser to `http://localhost:5173`.
+
+## 📂 Project Structure
+
+```text
+src/
+├── physics/          # Core mathematical simulation engines
+│   ├── quantumModel.js       # Squeezed states, shot noise, Heisenberg limit
+│   ├── gravitationalWave.js  # GW strain, chirp evolution, source modeling
+│   ├── basicInterference.js  # Coherence, wave superposition, fringe generation
+│   └── sagnacModel.js        # Relativistic rotation phase shifts
+├── ui/               # User Interface panels
+│   ├── AnalyticsPanel.jsx    # Astronomical/LIGO research panel
+│   ├── QuantumPanel.jsx      # Subatomic metrology panel
+│   ├── BeginnerPanel.jsx     # Fringe visualizer 
+│   ├── PhysicsNoisePanel.jsx # Environmental noise PSD configuration
+│   └── BottomBar.jsx         # Live telemetry and data readouts
+├── scene/            # Canvas-based optical layout renderers 
+│   ├── MichelsonScene.jsx 
+│   ├── SagnacScene.jsx
+│   └── SceneManager.jsx      # Photon routing & MZI visualization
+├── store/            # Global application state
+│   └── simulationStore.js    # Single source of truth for 60+ physical metrics
+└── App.jsx           # Main application shell and routing
+```
+
+## 🧪 Physics Accuracy
+This simulation avoids placeholder or cosmetic data. Outputs such as the detection probability, noise floor PSD, and interferogram fringe geometry are derived strictly from first principles (e.g., $I \propto \cos^2(\Delta\phi/2)$, $\Delta\phi = 4\pi h L / \lambda$, $r_{opt} = \frac{1}{2}\ln(2\eta N)$).
+
+## 📄 License
+This project is open-source.
