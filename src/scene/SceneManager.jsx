@@ -553,6 +553,10 @@ const SceneManager = () => {
       const interferenceLabel = (st.m1Enabled && st.m2Enabled && st.bs2Enabled) ? '' : ' (no interference)';
       ctx.fillText(`P(D1)=${(tp1 * 100).toFixed(0)}% P(D2)=${(tp2 * 100).toFixed(0)}%${interferenceLabel}`, px(680), py(35));
 
+      // Formula subheading
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = `${ps(7)}px monospace`; ctx.textAlign = 'left';
+      ctx.fillText('P(D₁) = cos²(δ/2)   δ = 2πΔL/λ', px(20), py(420));
+
       ctx.restore();
     };
 

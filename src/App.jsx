@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import SceneManager from './scene/SceneManager.jsx';
+import MichelsonScene from './scene/MichelsonScene.jsx';
+import SagnacScene from './scene/SagnacScene.jsx';
 import Sidebar from './ui/Sidebar.jsx';
 import BottomBar from './ui/BottomBar.jsx';
 import PhysicsNoisePanel from './ui/PhysicsNoisePanel.jsx';
@@ -214,6 +216,7 @@ const App = () => {
   const simulationPaused = useSimulationStore((s) => s.simulationPaused);
   const toggleResearchMode = useSimulationStore((s) => s.toggleResearchMode);
   const setParam = useSimulationStore((s) => s.setParam);
+  const interferometerType = useSimulationStore((s) => s.interferometerType);
   const [activeTab, setActiveTab] = useState('sim');
   const [darkMode, setDarkMode] = useState(true);
   const viewportRef = useRef(null);
@@ -270,6 +273,17 @@ const App = () => {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Interferometer type selector */}
+          <select value={interferometerType} onChange={e => setParam('interferometerType', e.target.value)} style={{
+            padding: '6px 12px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.08em', cursor: 'pointer', borderRadius: 'var(--radius-high)',
+            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
+            color: '#fff', fontFamily: 'inherit',
+          }}>
+            <option value="mzi" style={{ background: '#111' }}>Mach-Zehnder</option>
+            <option value="michelson" style={{ background: '#111' }}>Michelson</option>
+            <option value="sagnac" style={{ background: '#111' }}>Sagnac</option>
+          </select>
           {isResearchMode && (
             <>
               <button onClick={() => setParam('simulationPaused', !simulationPaused)} className="status-pill" style={{
@@ -310,7 +324,7 @@ const App = () => {
           <div className="app-main">
             <section ref={viewportRef} className="app-viewport glass-card" style={{ borderRadius: 'var(--radius-high)' }}>
               <div className="viewport-grid" style={{ position: 'absolute', inset: 0, opacity: 0.2 }} />
-              <SceneManager />
+              {interferometerType === 'michelson' ? <MichelsonScene /> : interferometerType === 'sagnac' ? <SagnacScene /> : <SceneManager />}
               <DetectionOverlay isResearch={false} />
               <button className="btn-ghost" onClick={handleFullscreen} style={{
                 position: 'absolute', bottom: 16, right: 16, padding: 8, borderRadius: 'var(--radius-full)', zIndex: 5,
@@ -334,7 +348,7 @@ const App = () => {
               <div className="app-main">
                 <section ref={viewportRef} className="app-viewport glass-card" style={{ borderRadius: 'var(--radius-high)', position: 'relative' }}>
                   <div className="viewport-grid" style={{ position: 'absolute', inset: 0, opacity: 0.2 }} />
-                  <SceneManager />
+                  {interferometerType === 'michelson' ? <MichelsonScene /> : interferometerType === 'sagnac' ? <SagnacScene /> : <SceneManager />}
                   <DetectionOverlay isResearch={true} />
                   <ComponentToolbar />
                   <button className="btn-ghost" onClick={handleFullscreen} style={{

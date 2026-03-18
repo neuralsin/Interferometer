@@ -18,6 +18,23 @@ const DEFAULT_PARAMS = {
   /* ===== Mode ===== */
   isResearchMode: false,
   simulationPaused: false,
+  interferometerType: 'mzi', // 'mzi' | 'michelson' | 'sagnac'
+
+  /* ===== MICHELSON-SPECIFIC ===== */
+  gasCellGas: 'air',       // 'air' | 'he' | 'ar'
+  gasCellPressure: 1.0,     // atm
+  gasCellLength: 0.05,      // m (5 cm)
+  mirrorTilt: 0,            // mrad
+  mirrorDisplacement: 0,    // μm — M2 position offset
+  curvatureFactor: 0.5,
+  waveAnimSpeed: 1.2,
+  waveAnimAmplitude: 11,
+
+  /* ===== SAGNAC-SPECIFIC ===== */
+  sagnacLoopLength: 1000,       // m — total fiber loop length
+  sagnacLoopRadius: 1.0,        // m — loop radius
+  sagnacNumLoops: 159.15,       // number of loops (L / 2πR)
+  sagnacOmega: 1.0,             // rad/s — rotational velocity
 
   /* ===== SOURCE ===== */
   wavelength:       632.8e-9,         // m — HeNe default

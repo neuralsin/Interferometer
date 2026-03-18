@@ -74,6 +74,78 @@ const ResearchPanel = () => {
 
   return (
     <>
+      {/* ===== MICHELSON GAS CELL (appears for Michelson type) ===== */}
+      {store.interferometerType === 'michelson' && (
+        <Section title="Gas Cell">
+          <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+            {[['air', 'Air'], ['he', 'Helium'], ['ar', 'Argon']].map(([val, label]) => (
+              <button key={val} onClick={() => setParam('gasCellGas', val)} style={{
+                flex: 1, padding: '5px 8px', fontSize: 9, fontWeight: 600,
+                borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'all 150ms',
+                border: store.gasCellGas === val ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                background: store.gasCellGas === val
+                  ? (val === 'air' ? 'rgba(55,138,221,0.2)' : val === 'he' ? 'rgba(29,158,117,0.2)' : 'rgba(216,90,48,0.2)')
+                  : 'rgba(255,255,255,0.03)',
+                color: store.gasCellGas === val
+                  ? (val === 'air' ? '#4f9cf9' : val === 'he' ? '#2dd4a8' : '#f5a623')
+                  : 'var(--text-mercury)',
+              }}>{label}</button>
+            ))}
+          </div>
+          <SliderControl label="Pressure (P)" unit="atm"
+            value={store.gasCellPressure} min={0.1} max={10} step={0.1}
+            onChange={(v) => setParam('gasCellPressure', v)} formatValue={(v) => v.toFixed(1)} />
+          <SliderControl label="Cell Length (Lc)" unit="cm"
+            value={store.gasCellLength * 100} min={1} max={30} step={0.5}
+            onChange={(v) => setParam('gasCellLength', v / 100)} formatValue={(v) => v.toFixed(1)} />
+          <SliderControl label="Mirror Tilt (θ)" unit="mrad"
+            value={store.mirrorTilt} min={0} max={5} step={0.01}
+            onChange={(v) => setParam('mirrorTilt', v)} formatValue={(v) => v.toFixed(2)} />
+          <SliderControl label="M2 Offset (Δd)" unit="μm"
+            value={store.mirrorDisplacement} min={-50} max={50} step={0.1}
+            onChange={(v) => setParam('mirrorDisplacement', v)} formatValue={(v) => v.toFixed(1)} />
+          <SliderControl label="Curvature Factor" unit=""
+            value={store.curvatureFactor} min={0.05} max={2} step={0.05}
+            onChange={(v) => setParam('curvatureFactor', v)} formatValue={(v) => v.toFixed(2)} />
+          <SliderControl label="Wave Speed" unit="×"
+            value={store.waveAnimSpeed} min={0.1} max={5} step={0.05}
+            onChange={(v) => setParam('waveAnimSpeed', v)} formatValue={(v) => v.toFixed(2)} />
+          <SliderControl label="Wave Amplitude" unit="px"
+            value={store.waveAnimAmplitude} min={3} max={20} step={0.5}
+            onChange={(v) => setParam('waveAnimAmplitude', v)} formatValue={(v) => v.toFixed(0)} />
+        </Section>
+      )}
+
+      {/* ===== SAGNAC LOOP (appears for Sagnac type) ===== */}
+      {store.interferometerType === 'sagnac' && (
+        <Section title="Sagnac Loop">
+          <SliderControl label="Loop Length" unit="m"
+            value={store.sagnacLoopLength} min={1} max={5000} step={1}
+            onChange={(v) => setParam('sagnacLoopLength', v)} formatValue={(v) => v.toFixed(0)} />
+          <SliderControl label="Loop Radius" unit="m"
+            value={store.sagnacLoopRadius} min={0.01} max={10} step={0.01}
+            onChange={(v) => setParam('sagnacLoopRadius', v)} formatValue={(v) => v.toFixed(2)} />
+          <SliderControl label="Num Loops" unit=""
+            value={store.sagnacNumLoops} min={1} max={1000} step={1}
+            onChange={(v) => setParam('sagnacNumLoops', v)} formatValue={(v) => v.toFixed(0)} />
+          <SliderControl label="Rot. Velocity (Ω)" unit="rad/s"
+            value={store.sagnacOmega} min={-10} max={10} step={0.01}
+            onChange={(v) => setParam('sagnacOmega', v)} formatValue={(v) => v.toFixed(2)} />
+          {/* Derived readouts */}
+          <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.6, marginTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+              <span>Area:</span><span>{(store.sagnacNumLoops * Math.PI * store.sagnacLoopRadius ** 2).toFixed(2)} m²</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+              <span>v (tangential):</span><span>{(Math.abs(store.sagnacOmega) * store.sagnacLoopRadius).toFixed(4)} m/s</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>ΔFringe:</span><span>{((4 * store.sagnacNumLoops * Math.PI * store.sagnacLoopRadius ** 2 * Math.abs(store.sagnacOmega)) / (299792458 * store.wavelength)).toExponential(3)}</span>
+            </div>
+          </div>
+        </Section>
+      )}
+
       {/* ===== LASER SOURCE ===== */}
       <Section title="Laser Engine">
         <SliderControl label="Wavelength" unit="nm"

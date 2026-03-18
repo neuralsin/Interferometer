@@ -20,6 +20,7 @@ const PhysicsNoisePanel = () => {
   const state = useSimulationStore();
   const { setParam } = state;
   const beamCanvasRef = useRef(null);
+  const psdCanvasRef = useRef(null);
 
   // Derived backend values
   const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
@@ -28,70 +29,216 @@ const PhysicsNoisePanel = () => {
   const gouy = gouyPhase(armX * 2, zR);
   const cohLength = calcCoherenceLength(state.laserLinewidth);
 
-  // Draw Gaussian beam profile (matching V3 canvas)
+  // Draw Gaussian beam profile using REAL physics
   useEffect(() => {
     const canvas = beamCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const resize = () => {
-      canvas.width = canvas.offsetWidth * 2;
-      canvas.height = canvas.offsetHeight * 2;
-      draw();
-    };
     const draw = () => {
+      const w2 = canvas.offsetWidth || 300;
+      const h2 = canvas.offsetHeight || 150;
+      canvas.width = w2 * 2;
+      canvas.height = h2 * 2;
       const w = canvas.width;
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
+
+      // Real physics: zR = π w₀² / λ
+      const w0 = state.beamWaist;
+      const zRVal = Math.PI * w0 * w0 / state.wavelength;
+      // Scale: map ±3*zR to canvas width
+      const zRange = 3 * zRVal;
+      const waistPixels = Math.max(8, Math.min(h * 0.3, (w0 / (w0 * 4)) * h * 0.3));
+
+      const midH = h / 2;
+      const waistX = w / 2;
+
       // Axis
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
       ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(0, h / 2);
-      ctx.lineTo(w, h / 2);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, midH); ctx.lineTo(w, midH); ctx.stroke();
       ctx.setLineDash([]);
-      // Beam profile (diverging Gaussian)
+      // Vertical line at waist
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.beginPath(); ctx.moveTo(waistX, 0); ctx.lineTo(waistX, h); ctx.stroke();
+
+      // Beam envelope: w(z) = w0 * sqrt(1 + (z/zR)²)
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      const midH = h / 2;
-      const waistX = w / 2;
       for (let x = 0; x <= w; x++) {
-        const z = (x - waistX) / (w / 4);
-        const waist = 10 * Math.sqrt(1 + z * z);
-        if (x === 0) ctx.moveTo(x, midH - waist);
-        else ctx.lineTo(x, midH - waist);
+        const z = ((x - waistX) / (w / 2)) * zRange;
+        const wz = w0 * Math.sqrt(1 + (z / zRVal) ** 2);
+        const pixelH = (wz / w0) * waistPixels;
+        if (x === 0) ctx.moveTo(x, midH - pixelH);
+        else ctx.lineTo(x, midH - pixelH);
       }
       for (let x = w; x >= 0; x--) {
-        const z = (x - waistX) / (w / 4);
-        const waist = 10 * Math.sqrt(1 + z * z);
-        ctx.lineTo(x, midH + waist);
+        const z = ((x - waistX) / (w / 2)) * zRange;
+        const wz = w0 * Math.sqrt(1 + (z / zRVal) ** 2);
+        const pixelH = (wz / w0) * waistPixels;
+        ctx.lineTo(x, midH + pixelH);
       }
       ctx.closePath();
       const grad = ctx.createLinearGradient(0, 0, w, 0);
-      grad.addColorStop(0, 'rgba(255,255,255,0.05)');
-      grad.addColorStop(0.5, 'rgba(255,255,255,0.15)');
-      grad.addColorStop(1, 'rgba(255,255,255,0.05)');
+      grad.addColorStop(0, 'rgba(255,255,255,0.03)');
+      grad.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+      grad.addColorStop(1, 'rgba(255,255,255,0.03)');
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.stroke();
+
+      // Waist indicator
+      ctx.strokeStyle = 'rgba(79,156,249,0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(waistX, midH - waistPixels); ctx.lineTo(waistX, midH + waistPixels); ctx.stroke();
+      ctx.fillStyle = 'rgba(79,156,249,0.5)'; ctx.font = `${Math.max(10, w * 0.02)}px monospace`; ctx.textAlign = 'left';
+      ctx.fillText('w₀', waistX + 4, midH - waistPixels - 4);
+
+      // Z axis labels
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = `${Math.max(9, w * 0.015)}px monospace`; ctx.textAlign = 'center';
+      ctx.fillText('-z_R', w * 0.25, h - 6);
+      ctx.fillText('0', waistX, h - 6);
+      ctx.fillText('+z_R', w * 0.75, h - 6);
+
+      // Formula
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = `${Math.max(8, w * 0.013)}px monospace`; ctx.textAlign = 'left';
+      ctx.fillText('w(z) = w₀√(1+(z/z_R)²)', 6, 14);
     };
-    window.addEventListener('resize', resize);
-    resize();
-    return () => window.removeEventListener('resize', resize);
+    draw();
+    const obs = new ResizeObserver(draw);
+    obs.observe(canvas.parentElement);
+    return () => obs.disconnect();
   }, [state.beamWaist, state.wavelength]);
 
-  // Compute noise bars from real PSD (lorentzianPSD from coherenceModel.js)
-  const noiseBars = useMemo(() => {
-    const freqs = [0.1, 0.5, 1, 5, 10, 50, 100, 200, 500, 1000, 2000, 5000, 8000, 10000, 15000];
-    const maxPSD = lorentzianPSD(0, state.laserLinewidth);
-    return freqs.map((f, i) => {
-      const psd = lorentzianPSD(f, state.laserLinewidth);
-      const normalized = maxPSD > 0 ? (psd / maxPSD) : 0;
-      const h = Math.max(5, normalized * 100);
-      return { h, o: Math.min(1, h / 100 + 0.1), delay: (i * 0.1).toFixed(1) };
-    });
-  }, [state.laserLinewidth]);
+  // Draw PSD as continuous wave/line graph on canvas (replaces bar graph)
+  useEffect(() => {
+    const canvas = psdCanvasRef.current;
+    if (!canvas) return;
+    const draw = () => {
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const pw = parent.clientWidth;
+      const ph = parent.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = pw * dpr; canvas.height = ph * dpr;
+      canvas.style.width = pw + 'px'; canvas.style.height = ph + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const pad = { top: 12, right: 16, bottom: 28, left: 42 };
+      const plotW = pw - pad.left - pad.right;
+      const plotH = ph - pad.top - pad.bottom;
+
+      ctx.clearRect(0, 0, pw, ph);
+
+      // Compute PSD curve (log frequency axis)
+      const numPoints = 200;
+      const fMin = 0.1, fMax = 20000;
+      const linewidth = state.laserLinewidth;
+      const maxPSD = lorentzianPSD(0, linewidth);
+      const maxPSDdB = maxPSD > 0 ? 10 * Math.log10(maxPSD) : 0;
+      const points = [];
+
+      for (let i = 0; i < numPoints; i++) {
+        const t = i / (numPoints - 1);
+        const freq = fMin * Math.pow(fMax / fMin, t);
+        const psd = lorentzianPSD(freq, linewidth);
+        const psdDB = psd > 0 ? 10 * Math.log10(psd) : -100;
+        points.push({ freq, psdDB });
+      }
+
+      const yMin = maxPSDdB - 60;
+      const yMax = maxPSDdB + 5;
+      const toX = (f) => pad.left + (Math.log10(f / fMin) / Math.log10(fMax / fMin)) * plotW;
+      const toY = (db) => pad.top + plotH * (1 - (db - yMin) / (yMax - yMin));
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 0.5;
+      [1, 10, 100, 1000, 10000].forEach(f => {
+        const x = toX(f);
+        ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, pad.top + plotH); ctx.stroke();
+      });
+      for (let db = yMin; db <= yMax; db += 10) {
+        const y = toY(db);
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + plotW, y); ctx.stroke();
+      }
+
+      // Filled area under curve
+      ctx.beginPath();
+      ctx.moveTo(toX(points[0].freq), toY(yMin));
+      points.forEach(p => ctx.lineTo(toX(p.freq), toY(p.psdDB)));
+      ctx.lineTo(toX(points[points.length - 1].freq), toY(yMin));
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+      grad.addColorStop(0, 'rgba(255,255,255,0.12)');
+      grad.addColorStop(1, 'rgba(255,255,255,0.01)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Line
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = toX(p.freq), y = toY(p.psdDB);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // Seismic noise overlay (if enabled)
+      if (state.seismicNoiseEnabled) {
+        ctx.beginPath();
+        for (let i = 0; i < numPoints; i++) {
+          const t = i / (numPoints - 1);
+          const freq = fMin * Math.pow(fMax / fMin, t);
+          const seismicPSD = 1e-18 / (1 + (freq / state.seismicFrequency) ** 4);
+          const db = seismicPSD > 0 ? 10 * Math.log10(seismicPSD) : yMin;
+          const clampDB = Math.max(yMin, Math.min(yMax, db));
+          const x = toX(freq), y = toY(clampDB);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = 'rgba(79,156,249,0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // X axis labels
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
+      [0.1, 1, 10, 100, 1000, 10000].forEach(f => {
+        const x = toX(f);
+        if (x >= pad.left && x <= pw - pad.right) {
+          ctx.fillText(f >= 1000 ? `${f / 1000}k` : f.toString(), x, ph - 6);
+        }
+      });
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = '7px sans-serif';
+      ctx.fillText('Frequency (Hz)', pad.left + plotW / 2, ph - 1);
+
+      // Y axis labels
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '7px monospace';
+      for (let db = yMin; db <= yMax; db += 15) {
+        const y = toY(db);
+        if (y >= pad.top && y <= pad.top + plotH) {
+          ctx.fillText(db.toFixed(0), pad.left - 3, y + 3);
+        }
+      }
+      ctx.save();
+      ctx.translate(8, pad.top + plotH / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = '7px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('PSD (dB/Hz)', 0, 0);
+      ctx.restore();
+    };
+    draw();
+    const obs = new ResizeObserver(draw);
+    obs.observe(canvas.parentElement);
+    return () => obs.disconnect();
+  }, [state.laserLinewidth, state.seismicNoiseEnabled, state.seismicFrequency]);
 
   // Compute live seismic injection RMS from noiseGenerator.js
   const seismicRMS = useMemo(() => {
@@ -110,7 +257,8 @@ const PhysicsNoisePanel = () => {
   }, [state.laserLinewidth, state.phaseNoiseEnabled]);
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', maxHeight: 'calc(100vh - 120px)', padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -198,24 +346,9 @@ const PhysicsNoisePanel = () => {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, flex: 1 }}>
-            {/* PSD Graph */}
-            <div className="glass-card" style={{ borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden' }}>
-              <div className="viewport-grid" style={{ position: 'absolute', inset: 0, opacity: 0.1 }} />
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 40px 48px', gap: 6 }}>
-                {noiseBars.map((bar, i) => (
-                  <div key={i} style={{
-                    width: 4, height: `${bar.h}%`,
-                    background: `rgba(255,255,255,${bar.o * 0.5})`,
-                    borderRadius: 2, transition: 'height 300ms ease',
-                  }} />
-                ))}
-              </div>
-              <div style={{ position: 'absolute', bottom: 12, left: 32, right: 32, display: 'flex', justifyContent: 'space-between', fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.3)' }}>
-                <span>0.1 Hz</span><span>100 Hz</span><span>10 kHz</span>
-              </div>
-              <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'rotate(-90deg) translateX(-50%)', transformOrigin: 'left', fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.3)' }}>
-                DENSITY (dB/Hz)
-              </div>
+            {/* PSD Wave Graph (Canvas) */}
+            <div className="glass-card" style={{ borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', minHeight: 200 }}>
+              <canvas ref={psdCanvasRef} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }} />
             </div>
 
             {/* Side Metrics */}
@@ -337,6 +470,7 @@ const PhysicsNoisePanel = () => {
           <span>Lc: {(299792458 / state.laserLinewidth).toFixed(2)}m</span>
         </div>
       </div>
+    </div>
     </div>
   );
 };
