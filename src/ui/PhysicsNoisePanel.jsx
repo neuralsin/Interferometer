@@ -302,6 +302,7 @@ const PhysicsNoisePanel = () => {
           <SliderControl label="Beam Waist (w₀)" unit="μm"
             value={state.beamWaist * 1e6} min={0.1} max={500} step={0.1}
             onChange={(um) => setParam('beamWaist', um * 1e-6)}
+            formula="z_R = π·w₀²/λ  (Rayleigh range):  w(z) = w₀ · √(1 + (z/z_R)²)"
             formatValue={(v) => v.toFixed(1)} />
 
           <div className="slider-row">
@@ -346,8 +347,8 @@ const PhysicsNoisePanel = () => {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, flex: 1 }}>
-            {/* PSD Wave Graph (Canvas) */}
-            <div className="glass-card" style={{ borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', minHeight: 200 }}>
+            {/* PSD Wave Graph (Canvas) — explicit height prevents clientHeight=0 */}
+          <div className="glass-card" style={{ borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', height: 220, minHeight: 220 }}>
               <canvas ref={psdCanvasRef} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }} />
             </div>
 

@@ -38,6 +38,41 @@ const interpPt = (pts, t) => {
   return pts[pts.length - 1];
 };
 
+// EM-wave drawing helper — draws sinusoidal wave in LOGICAL (0-700) coordinate space
+// then transforms to canvas via px/py. No broken ratio math.
+function drawEMWave(ctx, from, to, waveT, phOffset, color, alpha, px, py, ps, waveFreq, ampLogical) {
+  const wFreq = waveFreq || 0.08;   // spatial frequency cycles per logical unit
+  const amp   = ampLogical || 5;     // perpendicular amplitude in logical units
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return;
+  const ux = dx / len, uy = dy / len;   // unit vec along beam
+  const perpX = -uy, perpY = ux;        // perpendicular
+  const STEPS = Math.ceil(len * 1.0);   // one sample per logical pixel
+  ctx.beginPath();
+  for (let i = 0; i <= STEPS; i++) {
+    const frac = i / STEPS;
+    const lx = from.x + ux * len * frac;
+    const ly = from.y + uy * len * frac;
+    // Sinusoidal displacement perpendicular to beam direction
+    const wave = Math.sin(frac * len * wFreq - waveT * 4 + phOffset) * amp;
+    const wx = lx + perpX * wave;
+    const wy = ly + perpY * wave;
+    if (i === 0) ctx.moveTo(px(wx), py(wy));
+    else         ctx.lineTo(px(wx), py(wy));
+  }
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = Math.min(1, alpha);
+  ctx.lineWidth = ps(2.2);
+  ctx.lineJoin = 'round';
+  ctx.lineCap  = 'round';
+  ctx.shadowColor = color;
+  ctx.shadowBlur  = ps(3);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+}
+
 const SceneManager = () => {
   const canvasRef = useRef(null);
   const simRef = useRef({
@@ -45,6 +80,7 @@ const SceneManager = () => {
     waveT: 0, autoQ: 0, continuous: false, continuousTimer: 0,
   });
   const [, forceRender] = useState(0);
+  const [viewMode, setViewMode] = useState('photon'); // 'photon' | 'emwave' | 'both'
 
   const [positions, setPositions] = useState({
     BS1: { x: 150, y: 310 },
@@ -104,7 +140,9 @@ const SceneManager = () => {
   const compensatorOPD = compensatorEnabled
     ? (compensatorRefractiveIndex - 1) * compensatorThickness
     : 0;
-  const opd = baseOPD + tipOPD + dragOPD - compensatorOPD;
+  // MZI OPD — ONLY from visual drag difference + compensator.
+  // Do NOT include Michelson store tipOPD/baseOPD: those belong to Michelson scene only.
+  const opd = dragOPD - compensatorOPD;
 
   /**
    * Build a photon with SUPERPOSITION paths.
@@ -377,6 +415,37 @@ const SceneManager = () => {
         ctx.fillText(`${count}`, px(pos.x), py(pos.y) + h / 2 + ps(12));
       };
 
+      // ── EM WAVE overlay (drawn BEFORE other components so it's under labels) ──
+      const showEM = viewMode === 'emwave' || viewMode === 'both';
+      if (showEM) {
+        const emFreq   = 0.08;  // spatial frequency (visually pleasing sine density)
+        const emAlpha  = viewMode === 'both' ? 0.55 : 0.9;
+        const { p1: emP1, p2: emP2 } = detectionProbabilities(st.wavelength, opd);
+        // Amplitude of output beams scales with interference
+        const ampIn  = 6 * powerFactor;
+        const ampArm = 5 * powerFactor;
+        // INPUT → BS1
+        drawEMWave(ctx, INPUT, P.BS1, sim.waveT, 0,   wlColor, emAlpha,         px, py, ps, emFreq, ampIn);
+        // Arm 1: BS1→M1→BS2
+        if (st.m1Enabled) {
+          drawEMWave(ctx, P.BS1, P.M1,  sim.waveT, 1.1, wlColor, emAlpha * 0.85, px, py, ps, emFreq, ampArm);
+          drawEMWave(ctx, P.M1,  P.BS2, sim.waveT, 2.6, wlColor, emAlpha * 0.85, px, py, ps, emFreq, ampArm);
+        }
+        // Arm 2: BS1→PS→M2→BS2
+        if (st.m2Enabled) {
+          drawEMWave(ctx, P.BS1, P.PS,  sim.waveT, 1.6, wlColor, emAlpha * 0.8,  px, py, ps, emFreq, ampArm);
+          drawEMWave(ctx, P.PS,  P.M2,  sim.waveT, 2.8, wlColor, emAlpha * 0.8,  px, py, ps, emFreq, ampArm);
+          drawEMWave(ctx, P.M2,  P.BS2, sim.waveT, 4.2, wlColor, emAlpha * 0.8,  px, py, ps, emFreq, ampArm);
+        }
+        // Recombined output — amplitude & alpha from real interference
+        if (st.bs2Enabled) {
+          const a1 = Math.max(0.05, emAlpha * emP1);
+          const a2 = Math.max(0.05, emAlpha * emP2);
+          drawEMWave(ctx, P.BS2, D1, sim.waveT, 4.8,             wlColor, a1, px, py, ps, emFreq, 6 * emP1  * powerFactor);
+          drawEMWave(ctx, P.BS2, D2, sim.waveT, 4.8 + Math.PI,   wlColor, a2, px, py, ps, emFreq, 6 * emP2  * powerFactor);
+        }
+      }
+
       // Source
       const srcR = ps(14);
       ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.strokeStyle = wlColor; ctx.lineWidth = ps(1.5);
@@ -419,8 +488,8 @@ const SceneManager = () => {
       ctx.fillText('arm 1 (reflected)', px((P.BS1.x + P.M1.x) / 2) - ps(30), py((P.BS1.y + P.M1.y) / 2));
       ctx.fillText('arm 2 (transmitted)', px((P.BS1.x + P.M2.x) / 2), py(P.BS1.y) + ps(16));
 
-      // ── PHOTON ANIMATION ──
-      if (!st.simulationPaused) {
+      // ── PHOTON ANIMATION (only in photon or both mode) ──
+      if (!st.simulationPaused && (viewMode === 'photon' || viewMode === 'both')) {
         if (sim.autoQ > 0 && sim.photons.length < 15) {
           const batch = Math.min(sim.autoQ, 3);
           sim.autoQ -= batch;
@@ -605,11 +674,25 @@ const SceneManager = () => {
       <canvas ref={canvasRef}
         onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         style={{ position: 'absolute', inset: 0, display: 'block', cursor: dragRef.current.dragging ? 'grabbing' : 'default' }} />
-      {/* Fire controls */}
+
+      {/* View Mode Selector */}
+      <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10, display: 'flex', gap: 3, background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: 3, border: '1px solid rgba(255,255,255,0.08)' }}>
+        {[['photon', 'γ Photon'], ['emwave', '∿ EM Wave'], ['both', '⊕ Both']].map(([mode, label]) => (
+          <button key={mode} onClick={() => setViewMode(mode)} title={mode === 'photon' ? 'Quantum particle: single-photon path tracing with superposition' : mode === 'emwave' ? 'Classical EM: sinusoidal wave lines on all beam paths, amplitude from OPD' : 'Show both photon particles and EM waves simultaneously'} style={{
+            fontSize: 9, padding: '4px 10px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+            background: viewMode === mode ? 'rgba(255,255,255,0.18)' : 'transparent',
+            border: viewMode === mode ? '1px solid rgba(255,255,255,0.3)' : '1px solid transparent',
+            color: viewMode === mode ? '#fff' : 'rgba(255,255,255,0.45)',
+            transition: 'all 150ms',
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {/* Fire controls — always visible in all 3 modes */}
       <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 10, display: 'flex', gap: 5, alignItems: 'center' }}>
         <SimBtn label="Send 1" onClick={fireOne} />
-        <SimBtn label="×50" onClick={() => fireN(50)} />
-        <SimBtn label="×500" onClick={() => fireN(500)} />
+        <SimBtn label="×50"    onClick={() => fireN(50)} />
+        <SimBtn label="×500"   onClick={() => fireN(500)} />
         <SimBtn label={simRef.current.continuous ? '■ Stop' : '▶ Auto'} onClick={toggleContinuous} active={simRef.current.continuous} />
         <SimBtn label="Reset" onClick={resetCounts} danger />
       </div>

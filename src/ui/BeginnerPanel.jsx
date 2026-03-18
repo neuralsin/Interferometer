@@ -2,13 +2,23 @@ import React, { useRef, useEffect } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor } from '../physics/basicInterference.js';
 
-/** Reusable V3-styled slider row */
-export const SliderControl = ({ label, unit, value, min, max, step, onChange, formatValue }) => {
+/** Reusable V3-styled slider row with optional formula tooltip */
+export const SliderControl = ({ label, unit, value, min, max, step, onChange, formatValue, formula }) => {
   const displayValue = formatValue ? formatValue(value) : value;
   return (
     <div className="slider-row">
       <div className="slider-row-label">
-        <span>{label}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {label}
+          {formula && (
+            <span title={formula} style={{
+              cursor: 'help', fontSize: 9, opacity: 0.45, marginLeft: 2,
+              border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%',
+              width: 12, height: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'sans-serif', flexShrink: 0, lineHeight: 1,
+            }}>ⓘ</span>
+          )}
+        </span>
         <span className="slider-value">{displayValue} {unit}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}

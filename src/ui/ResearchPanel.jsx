@@ -94,25 +94,32 @@ const ResearchPanel = () => {
           </div>
           <SliderControl label="Pressure (P)" unit="atm"
             value={store.gasCellPressure} min={0.1} max={10} step={0.1}
-            onChange={(v) => setParam('gasCellPressure', v)} formatValue={(v) => v.toFixed(1)} />
+            onChange={(v) => setParam('gasCellPressure', v)} formatValue={(v) => v.toFixed(1)}
+            formula="n = 1 + n₀·P   (n₀=293×10⁻⁶ for air at STP)   Gas OPD = 2(n−1)L_c" />
           <SliderControl label="Cell Length (Lc)" unit="cm"
             value={store.gasCellLength * 100} min={1} max={30} step={0.5}
-            onChange={(v) => setParam('gasCellLength', v / 100)} formatValue={(v) => v.toFixed(1)} />
+            onChange={(v) => setParam('gasCellLength', v / 100)} formatValue={(v) => v.toFixed(1)}
+            formula="Gas OPD = 2(n−1)L_c   where n = 1 + n₀·P" />
           <SliderControl label="Mirror Tilt (θ)" unit="mrad"
             value={store.mirrorTilt} min={0} max={5} step={0.01}
-            onChange={(v) => setParam('mirrorTilt', v)} formatValue={(v) => v.toFixed(2)} />
+            onChange={(v) => setParam('mirrorTilt', v)} formatValue={(v) => v.toFixed(2)}
+            formula="Fringe spacing Λ = λ/(2θ)   where θ is tilt in radians" />
           <SliderControl label="M2 Offset (Δd)" unit="μm"
             value={store.mirrorDisplacement} min={-50} max={50} step={0.1}
-            onChange={(v) => setParam('mirrorDisplacement', v)} formatValue={(v) => v.toFixed(1)} />
+            onChange={(v) => setParam('mirrorDisplacement', v)} formatValue={(v) => v.toFixed(1)}
+            formula="Mirror OPD = 2Δd   Phase shift Δφ = 4πΔd/λ   Full fringe cycle = λ/2" />
           <SliderControl label="Curvature Factor" unit=""
             value={store.curvatureFactor} min={0.05} max={2} step={0.05}
-            onChange={(v) => setParam('curvatureFactor', v)} formatValue={(v) => v.toFixed(2)} />
+            onChange={(v) => setParam('curvatureFactor', v)} formatValue={(v) => v.toFixed(2)}
+            formula="Controls wavefront curvature in the fringe rendering. 1.0 = flat wavefront." />
           <SliderControl label="Wave Speed" unit="×"
             value={store.waveAnimSpeed} min={0.1} max={5} step={0.05}
-            onChange={(v) => setParam('waveAnimSpeed', v)} formatValue={(v) => v.toFixed(2)} />
+            onChange={(v) => setParam('waveAnimSpeed', v)} formatValue={(v) => v.toFixed(2)}
+            formula="Animation time-scale multiplier. Does NOT affect physics. v_gas = c/n inside cell." />
           <SliderControl label="Wave Amplitude" unit="px"
             value={store.waveAnimAmplitude} min={3} max={20} step={0.5}
-            onChange={(v) => setParam('waveAnimAmplitude', v)} formatValue={(v) => v.toFixed(0)} />
+            onChange={(v) => setParam('waveAnimAmplitude', v)} formatValue={(v) => v.toFixed(0)}
+            formula="Visual wave displacement amplitude. Does NOT affect physics OPD or fringe count." />
         </Section>
       )}
 
@@ -121,16 +128,20 @@ const ResearchPanel = () => {
         <Section title="Sagnac Loop">
           <SliderControl label="Loop Length" unit="m"
             value={store.sagnacLoopLength} min={1} max={5000} step={1}
-            onChange={(v) => setParam('sagnacLoopLength', v)} formatValue={(v) => v.toFixed(0)} />
+            onChange={(v) => setParam('sagnacLoopLength', v)} formatValue={(v) => v.toFixed(0)}
+            formula="L = N·2πR   Total optical path length of the fiber loop" />
           <SliderControl label="Loop Radius" unit="m"
             value={store.sagnacLoopRadius} min={0.01} max={10} step={0.01}
-            onChange={(v) => setParam('sagnacLoopRadius', v)} formatValue={(v) => v.toFixed(2)} />
+            onChange={(v) => setParam('sagnacLoopRadius', v)} formatValue={(v) => v.toFixed(2)}
+            formula="A = NπR²   Total enclosed area. v = ΩR (tangential speed at rim)" />
           <SliderControl label="Num Loops" unit=""
             value={store.sagnacNumLoops} min={1} max={1000} step={1}
-            onChange={(v) => setParam('sagnacNumLoops', v)} formatValue={(v) => v.toFixed(0)} />
+            onChange={(v) => setParam('sagnacNumLoops', v)} formatValue={(v) => v.toFixed(0)}
+            formula="A_total = N·πR²   More loops = larger effective area = higher sensitivity" />
           <SliderControl label="Rot. Velocity (Ω)" unit="rad/s"
             value={store.sagnacOmega} min={-10} max={10} step={0.01}
-            onChange={(v) => setParam('sagnacOmega', v)} formatValue={(v) => v.toFixed(2)} />
+            onChange={(v) => setParam('sagnacOmega', v)} formatValue={(v) => v.toFixed(2)}
+            formula="ΔN = 4AΩ/(cλ)   Sign of Ω determines CW/CCW phase lead" />
           {/* Derived readouts */}
           <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.6, marginTop: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -150,13 +161,16 @@ const ResearchPanel = () => {
       <Section title="Laser Engine">
         <SliderControl label="Wavelength" unit="nm"
           value={store.wavelength * 1e9} min={380} max={1550} step={0.1}
-          onChange={(v) => setParam('wavelength', v * 1e-9)} formatValue={(v) => v.toFixed(1)} />
+          onChange={(v) => setParam('wavelength', v * 1e-9)} formatValue={(v) => v.toFixed(1)}
+          formula="ν = c/λ   (frequency)   k = 2π/λ   (wavenumber)" />
         <SliderControl label="Power" unit="mW"
           value={store.laserPower * 1e3} min={0.01} max={100} step={0.01}
-          onChange={(v) => setParam('laserPower', v * 1e-3)} formatValue={(v) => v.toFixed(2)} />
+          onChange={(v) => setParam('laserPower', v * 1e-3)} formatValue={(v) => v.toFixed(2)}
+          formula="N_photon = Pλτ/(hc)   Φ = Pλ/(hc) photons/s" />
         <SliderControl label="Beam Waist (w₀)" unit="mm"
           value={store.beamWaist * 1e3} min={0.05} max={5} step={0.01}
-          onChange={(v) => setParam('beamWaist', v * 1e-3)} formatValue={(v) => v.toFixed(2)} />
+          onChange={(v) => setParam('beamWaist', v * 1e-3)} formatValue={(v) => v.toFixed(2)}
+          formula="z_R = πw₀²/λ   w(z) = w₀√(1+(z/z_R)²)   Gouy phase ψ = atan(z/z_R)" />
         <NumberRow label="Linewidth" unit="MHz" value={store.laserLinewidth} paramKey="laserLinewidth" convert={1e6} precision={1} />
         <div style={{ marginBottom: 8 }}>
           <label className="label-nano" style={{ display: 'block', marginBottom: 6 }}>Polarization</label>
