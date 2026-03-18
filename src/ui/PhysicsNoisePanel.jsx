@@ -257,8 +257,8 @@ const PhysicsNoisePanel = () => {
   }, [state.laserLinewidth, state.phaseNoiseEnabled]);
 
   return (
-    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-    <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: 0 }}>
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -288,7 +288,7 @@ const PhysicsNoisePanel = () => {
       </div>
 
       {/* Main Grid — 12 col */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24, flex: 1 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
 
         {/* Wave Optics (Left) */}
         <section className="glass-card" style={{ borderRadius: 'var(--radius-md)', padding: 24, display: 'flex', flexDirection: 'column' }}>

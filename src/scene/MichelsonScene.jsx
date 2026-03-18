@@ -19,8 +19,8 @@ const GAS_DATA = {
   ar:  { n0: 281e-6, color: [216, 90, 48],  label: 'Argon' },
 };
 
-const DESTR_R = 57, DESTR_G = 255, DESTR_B = 20;
-const CONSTR_R = 255, CONSTR_G = 230, CONSTR_B = 80;
+const CONSTR_R = 57, CONSTR_G = 255, CONSTR_B = 20;     // Green = constructive
+const DESTR_R = 255, DESTR_G = 230, DESTR_B = 80;       // Yellow = destructive
 
 function lambdaToRGB(nm) {
   let r = 0, g = 0, b = 0;
@@ -78,22 +78,22 @@ const MichelsonScene = () => {
       const totalH = container.clientHeight;
       if (totalW < 10 || totalH < 10) return; // not laid out yet
 
-      waveTRef.current += 0.016 * st.waveAnimSpeed * 4;
+      waveTRef.current += 0.016 * st.waveAnimSpeed * 1.5;
       const waveT = waveTRef.current;
 
       // Parameter animation
       const pa = paramAnimRef.current;
       if (pa.active) {
         if (pa.mode === 'p') {
-          pa.val = +(pa.val + 0.04).toFixed(2);
+          pa.val = +(pa.val + 0.012).toFixed(3);
           if (pa.val > 10) pa.val = 0.1;
           st.setParam('gasCellPressure', pa.val);
         } else if (pa.mode === 't') {
-          pa.val = +(pa.val + 0.008).toFixed(3);
+          pa.val = +(pa.val + 0.003).toFixed(3);
           if (pa.val > 5) pa.val = 0;
           st.setParam('mirrorTilt', pa.val);
         } else if (pa.mode === 'm') {
-          pa.val = +(pa.val + pa.dir * 0.3).toFixed(2);
+          pa.val = +(pa.val + pa.dir * 0.1).toFixed(2);
           if (pa.val >= 50) { pa.val = 50; pa.dir = -1; }
           if (pa.val <= -50) { pa.val = -50; pa.dir = 1; }
           st.setParam('mirrorDisplacement', pa.val);

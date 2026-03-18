@@ -196,7 +196,7 @@ const BottomBar = () => {
       </div>
 
       {/* Phase Density Profile — with legend, axes, all-param responsive */}
-      <div className="glass-card" style={{ flex: 1, borderRadius: 'var(--radius-high)', padding: 16, display: 'flex', flexDirection: 'column' }}>
+      <div className="glass-card" style={{ flex: 1, borderRadius: 'var(--radius-high)', padding: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
         {/* Header + Legend */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <h4 className="label-micro" style={{ letterSpacing: '0.2em' }}>Phase Density Profile</h4>

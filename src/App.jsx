@@ -33,32 +33,93 @@ const DownloadIcon = () => (
   </svg>
 );
 
-/** Detection Stats Overlay — replaces System Telemetry */
+/** Detection Stats Overlay — type-aware real physics */
 const DetectionOverlay = ({ isResearch }) => {
   const state = useSimulationStore();
+  const iType = state.interferometerType;
+
+  // === MZI calculations ===
   const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
   const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
-  // OPD must match SceneManager: base + tip differential + compensator
   const tipOPD = (state.mirror1Tip - state.mirror2Tip) * armX;
   const compensatorOPD = state.compensatorEnabled
-    ? ((state.compensatorRefractiveIndex || 1.5168) - 1) * (state.compensatorThickness || 0.00635)
-    : 0;
+    ? ((state.compensatorRefractiveIndex || 1.5168) - 1) * (state.compensatorThickness || 0.00635) : 0;
   const opd = 2 * (armX - armY) + tipOPD - compensatorOPD;
   const { p1, p2 } = detectionProbabilities(state.wavelength, opd);
   const vis = fringeVisibility(opd, state.laserLinewidth);
-  // Read LIVE sim counts from SceneManager particle sim
-  const n1 = state.simD1;
-  const n2 = state.simD2;
-  const total = state.simFired;
-  const actualP1 = total > 0 ? (n1 / total * 100).toFixed(1) : '—';
-  const actualP2 = total > 0 ? (n2 / total * 100).toFixed(1) : '—';
-  const delta = total > 0 ? ((n1 / total - p1) * 100).toFixed(2) : '0.00';
+  const n1 = state.simD1, n2 = state.simD2, total = state.simFired;
 
+  // === Michelson calculations ===
+  const GAS = { air: { n0: 293e-6 }, he: { n0: 35e-6 }, ar: { n0: 281e-6 } };
+  const gasN = 1 + (GAS[state.gasCellGas]?.n0 || 293e-6) * state.gasCellPressure;
+  const mGasOPD = 2 * (gasN - 1) * state.gasCellLength;
+  const mMirOPD = 2 * state.mirrorDisplacement * 1e-6;
+  const mTotalOPD = mGasOPD + mMirOPD;
+  const mPhase = (2 * Math.PI / state.wavelength) * mTotalOPD;
+  const mPhaseMod = ((mPhase % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  const mCosVal = (Math.cos(mPhaseMod) + 1) / 2;
+  const mFringes = mTotalOPD / state.wavelength;
+  const mRegime = state.mirrorTilt < 0.05 ? 'Circular' : state.mirrorTilt < 0.5 ? 'Curved' : state.mirrorTilt < 2 ? 'Straight' : 'Dense';
+  const mP1 = mCosVal, mP2 = 1 - mCosVal;
+
+  // === Sagnac calculations ===
+  const sArea = state.sagnacNumLoops * Math.PI * state.sagnacLoopRadius ** 2;
+  const c = 299792458;
+  const sDt = (4 * sArea * Math.abs(state.sagnacOmega)) / (c * c);
+  const sDFringe = (4 * sArea * Math.abs(state.sagnacOmega)) / (c * state.wavelength);
+  const sPhase = 2 * Math.PI * sDFringe;
+  const sCosVal = (Math.cos(sPhase) + 1) / 2;
+  const v = Math.abs(state.sagnacOmega) * state.sagnacLoopRadius;
+  const sCW = c - v, sCCW = c + v;
+  const sP1 = sCosVal, sP2 = 1 - sCosVal;
+
+  if (iType === 'michelson') {
+    return (
+      <div className="viewport-overlay" style={{ maxWidth: isResearch ? 220 : 180 }}>
+        <p style={{ color: '#fff', fontWeight: 700, marginBottom: 6, fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase' }}>Michelson Data</p>
+        <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gas OPD:</span><span style={{ color: '#fff' }}>{(mGasOPD * 1e9).toFixed(2)} nm</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Mirror OPD:</span><span style={{ color: '#fff' }}>{(mMirOPD * 1e9).toFixed(1)} nm</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Total OPD:</span><span style={{ color: '#fff' }}>{(mTotalOPD * 1e9).toFixed(1)} nm</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Fringes:</span><span style={{ color: '#fff' }}>{mFringes.toFixed(3)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>n(gas):</span><span style={{ color: '#fff' }}>{gasN.toFixed(6)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Regime:</span><span style={{ color: '#fff' }}>{mRegime}</span></div>
+        </div>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 9, fontFamily: 'var(--font-mono)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(constr):</span><span style={{ color: '#2dd4a8' }}>{(mP1 * 100).toFixed(1)}%</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(destr):</span><span style={{ color: '#f5a623' }}>{(mP2 * 100).toFixed(1)}%</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Visibility:</span><span style={{ color: '#fff' }}>{(vis * 100).toFixed(1)}%</span></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (iType === 'sagnac') {
+    return (
+      <div className="viewport-overlay" style={{ maxWidth: isResearch ? 220 : 180 }}>
+        <p style={{ color: '#fff', fontWeight: 700, marginBottom: 6, fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase' }}>Sagnac Data</p>
+        <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Area:</span><span style={{ color: '#fff' }}>{sArea.toFixed(2)} m²</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>ΔFringe:</span><span style={{ color: '#fff' }}>{sDFringe.toExponential(3)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Δt:</span><span style={{ color: '#fff' }}>{sDt.toExponential(3)} s</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>CW speed:</span><span style={{ color: '#4fa0ff' }}>{sCW.toFixed(2)} m/s</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>CCW speed:</span><span style={{ color: '#ff6464' }}>{sCCW.toFixed(2)} m/s</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>v(tang):</span><span style={{ color: '#fff' }}>{v.toFixed(4)} m/s</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Ω:</span><span style={{ color: '#fff' }}>{state.sagnacOmega.toFixed(3)} rad/s</span></div>
+        </div>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 9, fontFamily: 'var(--font-mono)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(constr):</span><span style={{ color: '#2dd4a8' }}>{(sP1 * 100).toFixed(1)}%</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(destr):</span><span style={{ color: '#f5a623' }}>{(sP2 * 100).toFixed(1)}%</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Phase:</span><span style={{ color: '#fff' }}>{(sPhase / (2 * Math.PI)).toFixed(4)}λ</span></div>
+        </div>
+      </div>
+    );
+  }
+
+  // MZI (default)
   return (
     <div className="viewport-overlay" style={{ maxWidth: isResearch ? 220 : 180 }}>
-      <p style={{ color: '#fff', fontWeight: 700, marginBottom: 6, fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-        Detected Counts
-      </p>
+      <p style={{ color: '#fff', fontWeight: 700, marginBottom: 6, fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase' }}>Detected Counts</p>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
         <span style={{ color: '#2dd4a8' }}>D₁:</span><span style={{ color: '#fff', fontWeight: 700 }}>{n1}</span>
       </div>
@@ -74,37 +135,14 @@ const DetectionOverlay = ({ isResearch }) => {
             <div style={{ flex: n1, height: 4, background: '#2dd4a8', borderRadius: 2 }} />
             <div style={{ flex: Math.max(1, n2), height: 4, background: '#4f9cf9', borderRadius: 2 }} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8 }}>
-            <span style={{ color: '#2dd4a8' }}>{actualP1}%</span>
-            <span style={{ color: '#4f9cf9' }}>{actualP2}%</span>
-          </div>
         </div>
       )}
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 8 }}>
         <p style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Theory</p>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>P₁ (cos²δ/2):</span><span style={{ color: '#fff' }}>{(p1 * 100).toFixed(1)}%</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>P₂ (sin²δ/2):</span><span style={{ color: '#fff' }}>{(p2 * 100).toFixed(1)}%</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Visibility:</span><span style={{ color: '#fff' }}>{(vis * 100).toFixed(1)}%</span>
-        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P₁ (cos²δ/2):</span><span style={{ color: '#fff' }}>{(p1 * 100).toFixed(1)}%</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P₂ (sin²δ/2):</span><span style={{ color: '#fff' }}>{(p2 * 100).toFixed(1)}%</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Visibility:</span><span style={{ color: '#fff' }}>{(vis * 100).toFixed(1)}%</span></div>
       </div>
-      {isResearch && total > 10 && (
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 8 }}>
-          <p style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-            Δ(sim − theory)
-          </p>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>D₁:</span>
-            <span style={{ color: Math.abs(parseFloat(delta)) < 5 ? '#4f4' : '#f84' }}>
-              {delta}%
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -141,21 +179,25 @@ const BeginnerBottomBar = () => {
   );
 };
 
-const TOOLBAR_ITEMS = [
-  { label: 'M1', desc: 'Mirror 1 — Toggle ON/OFF. When off, arm 1 is blocked (no reflection). Destroys interference.', paramKey: 'm1Enabled', isToggle: true },
-  { label: 'M2', desc: 'Mirror 2 — Toggle ON/OFF. When off, arm 2 is blocked (no reflection). Destroys interference.', paramKey: 'm2Enabled', isToggle: true },
-  { label: 'BS₂', desc: 'Beam Splitter 2 — Toggle ON/OFF. When off, no recombination occurs. Photons go straight to one detector.', paramKey: 'bs2Enabled', isToggle: true },
-  { label: 'CP', desc: 'Compensator Plate — Equalizes optical path through BS glass. Essential for white-light fringes.', paramKey: 'compensatorEnabled', isToggle: true },
-  { label: 'GW', desc: 'Gravitational Wave — Inject h₀=10⁻²¹ strain signal. Simulates LIGO-like detection.', paramKey: 'gwEnabled', isToggle: true },
-  { label: '🔊', desc: 'Seismic Noise — Ground vibration coupling at ~15 Hz. Adds position jitter to mirrors.', paramKey: 'seismicNoiseEnabled', isToggle: true },
-  { label: '🌡', desc: 'Thermal Drift — Temperature-driven path changes via CTE of mirror substrates.', paramKey: 'thermalDriftEnabled', isToggle: true },
+const MZI_TOOLBAR = [
+  { label: 'M1', desc: 'Mirror 1 — Toggle ON/OFF.', paramKey: 'm1Enabled', isToggle: true },
+  { label: 'M2', desc: 'Mirror 2 — Toggle ON/OFF.', paramKey: 'm2Enabled', isToggle: true },
+  { label: 'BS₂', desc: 'Beam Splitter 2 — Toggle ON/OFF.', paramKey: 'bs2Enabled', isToggle: true },
+  { label: 'CP', desc: 'Compensator Plate — Equalizes path.', paramKey: 'compensatorEnabled', isToggle: true },
+];
+const SHARED_TOOLBAR = [
+  { label: 'GW', desc: 'Gravitational Wave strain signal.', paramKey: 'gwEnabled', isToggle: true },
+  { label: '🔊', desc: 'Seismic Noise coupling.', paramKey: 'seismicNoiseEnabled', isToggle: true },
+  { label: '🌡', desc: 'Thermal Drift.', paramKey: 'thermalDriftEnabled', isToggle: true },
 ];
 
 const ComponentToolbar = () => {
   const setParam = useSimulationStore((s) => s.setParam);
+  const iType = useSimulationStore((s) => s.interferometerType);
+  const items = iType === 'mzi' ? [...MZI_TOOLBAR, ...SHARED_TOOLBAR] : SHARED_TOOLBAR;
   return (
     <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, display: 'flex', gap: 6 }}>
-      {TOOLBAR_ITEMS.map(item => (
+      {items.map(item => (
         <ToolbarBtn key={item.label} {...item} setParam={setParam} />
       ))}
     </div>
