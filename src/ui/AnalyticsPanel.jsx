@@ -235,22 +235,22 @@ const AnalyticsPanel = () => {
 
           {/* GW Metrics */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <GWMetric label="SNR" value={snrDB} unit="dB" />
-            <GWMetric label="h_min" value={hMin.toExponential(1)} unit="" />
-            <GWMetric label="Chirp Mass" value={`${chirpMass.toFixed(1)}`} unit="M☉" />
-            <GWMetric label="d_L" value={`${luminosityDist}`} unit="Mpc" />
-            <GWMetric label="Final Spin" value={finalSpin.toFixed(3)} unit="a/M" />
-            <GWMetric label="Δφ_GW" value={Math.abs(phaseShift).toExponential(1)} unit="rad" />
+            <GWMetric label="SNR" value={snrDB} unit="dB" desc="Signal-to-noise ratio of detected GW signal. Higher = easier to detect." />
+            <GWMetric label="h_min" value={hMin.toExponential(1)} unit="" desc="Minimum detectable strain. Set by laser power, arm length, and quantum noise." />
+            <GWMetric label="Chirp Mass" value={`${chirpMass.toFixed(1)}`} unit="M☉" desc="Combined mass parameter M_c = (m₁m₂)^(3/5) / M^(1/5). Determines chirp rate." />
+            <GWMetric label="d_L" value={`${luminosityDist}`} unit="Mpc" desc="Luminosity distance to source. Estimated from chirp mass and strain amplitude." />
+            <GWMetric label="Final Spin" value={finalSpin.toFixed(3)} unit="a/M" desc="Dimensionless spin of merged remnant black hole. 0=non-spinning, 1=maximal Kerr." />
+            <GWMetric label="Δφ_GW" value={Math.abs(phaseShift).toExponential(1)} unit="rad" desc="Phase shift from GW strain: Δφ = 4πhL/λ. This is what the interferometer measures." />
           </div>
 
           {/* Event Log */}
           <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 12, flex: 1 }}>
-            <h4 className="label-micro" style={{ letterSpacing: '0.2em', marginBottom: 8 }}>Event Log</h4>
+            <h4 className="label-micro" style={{ letterSpacing: '0.2em', marginBottom: 8 }}>Live Readout</h4>
             <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <p>[{new Date().toISOString().slice(11, 19)}] GW engine active — {state.celestialSource.toUpperCase()}</p>
-              <p>[SYS] arm_L = {state.gwArmLength} km | M = {state.mass1}+{state.mass2} M☉</p>
-              <p>[DET] h_min = {hMin.toExponential(1)} | SNR = {snrDB} dB</p>
-              <p>[QTM] N_photon = {N.toExponential(2)} | r_sqz = {state.squeezingParam.toFixed(2)}</p>
+              <p>Source: {CELESTIAL_SOURCES.find(s => s.value === state.celestialSource)?.label || state.celestialSource}</p>
+              <p>Arm: {state.gwArmLength} km | Masses: {state.mass1}+{state.mass2} M☉</p>
+              <p>h_min = {hMin.toExponential(1)} | SNR = {snrDB} dB</p>
+              <p>N_photon = {N.toExponential(2)} | Squeeze: r={state.squeezingParam.toFixed(2)}</p>
             </div>
           </section>
         </div>
@@ -262,14 +262,17 @@ const AnalyticsPanel = () => {
           <div>
             <p style={{ fontWeight: 700, color: '#fff', marginBottom: 4, fontSize: 9 }}>CHIRP STRAIN</p>
             <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>h(t) = A(1-t/t_m)^(-1/4) cos(φ)</p>
+            <p style={{ fontSize: 8, marginTop: 4, opacity: 0.5 }}>Waveform amplitude grows as binary inspirals toward merger.</p>
           </div>
           <div>
             <p style={{ fontWeight: 700, color: '#fff', marginBottom: 4, fontSize: 9 }}>MIN DETECTABLE</p>
             <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>h_min = λ/(4πL) · 1/√N · e^r</p>
+            <p style={{ fontSize: 8, marginTop: 4, opacity: 0.5 }}>Quantum-limited sensitivity. Squeezed light (r{'>'}{0}) improves detection.</p>
           </div>
           <div>
             <p style={{ fontWeight: 700, color: '#fff', marginBottom: 4, fontSize: 9 }}>CHIRP MASS</p>
             <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>M_c = (m₁m₂)^(3/5) / M^(1/5)</p>
+            <p style={{ fontSize: 8, marginTop: 4, opacity: 0.5 }}>Determines the frequency evolution of the gravitational wave signal.</p>
           </div>
         </div>
       </footer>
@@ -277,18 +280,34 @@ const AnalyticsPanel = () => {
   );
 };
 
-const GWMetric = ({ label, value, unit }) => (
-  <div className="glass-card" style={{
-    borderRadius: 'var(--radius-md)', padding: 10,
-    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-  }}>
-    <span style={{ fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-slate)', display: 'block', marginBottom: 4 }}>
-      {label}
-    </span>
-    <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: '#fff' }}>
-      {value} <span style={{ fontSize: 8, color: 'var(--text-mercury)', opacity: 0.5 }}>{unit}</span>
-    </span>
-  </div>
-);
+const GWMetric = ({ label, value, unit, desc }) => {
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <div className="glass-card" style={{
+      borderRadius: 'var(--radius-md)', padding: 10, position: 'relative',
+      background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+      cursor: 'default',
+    }} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <span style={{ fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-slate)', display: 'block', marginBottom: 4 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: '#fff' }}>
+        {value} <span style={{ fontSize: 8, color: 'var(--text-mercury)', opacity: 0.5 }}>{unit}</span>
+      </span>
+      {hovered && desc && (
+        <div style={{
+          position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 4,
+          padding: '6px 10px', fontSize: 9, lineHeight: 1.5,
+          background: 'rgba(20,24,36,0.92)', backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6,
+          color: 'rgba(255,255,255,0.6)', zIndex: 20, pointerEvents: 'none',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        }}>
+          {desc}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default AnalyticsPanel;

@@ -9,7 +9,6 @@ import useSimulationStore from './store/simulationStore.js';
 import { exportCSV, exportJSON } from './physics/dataExport.js';
 import { detectionProbabilities } from './physics/basicInterference.js';
 import { fringeVisibility } from './physics/coherenceModel.js';
-import { photonCount, phaseSNR } from './physics/quantumModel.js';
 
 const TABS = [
   { id: 'sim', label: 'SIMULATION' },
@@ -40,11 +39,13 @@ const DetectionOverlay = ({ isResearch }) => {
   const opd = 2 * (armX - armY);
   const { p1, p2 } = detectionProbabilities(state.wavelength, opd);
   const vis = fringeVisibility(opd, state.laserLinewidth);
-  const N = photonCount(state.laserPower, state.wavelength, state.detectorExposureTime);
-  // Simulated detection counts proportional to theoretical probabilities
-  const n1 = Math.round(p1 * N * 1e-10);
-  const n2 = Math.round(p2 * N * 1e-10);
-  const coincidences = Math.round(Math.min(n1, n2) * 0.001);
+  // Read LIVE sim counts from SceneManager particle sim
+  const n1 = state.simD1;
+  const n2 = state.simD2;
+  const total = state.simFired;
+  const actualP1 = total > 0 ? (n1 / total * 100).toFixed(1) : '—';
+  const actualP2 = total > 0 ? (n2 / total * 100).toFixed(1) : '—';
+  const delta = total > 0 ? ((n1 / total - p1) * 100).toFixed(2) : '0.00';
 
   return (
     <div className="viewport-overlay" style={{ maxWidth: isResearch ? 220 : 180 }}>
@@ -52,14 +53,26 @@ const DetectionOverlay = ({ isResearch }) => {
         Detected Counts
       </p>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-        <span>Det_1 (N₁):</span><span style={{ color: '#fff' }}>{n1.toLocaleString()}</span>
+        <span style={{ color: '#2dd4a8' }}>D₁:</span><span style={{ color: '#fff', fontWeight: 700 }}>{n1}</span>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-        <span>Det_2 (N₂):</span><span style={{ color: '#fff' }}>{n2.toLocaleString()}</span>
+        <span style={{ color: '#4f9cf9' }}>D₂:</span><span style={{ color: '#fff', fontWeight: 700 }}>{n2}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-        <span>Coinc (Nc):</span><span style={{ color: '#fff' }}>{coincidences}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: 4, paddingTop: 4 }}>
+        <span>Total:</span><span style={{ color: '#fff' }}>{total}</span>
       </div>
+      {total > 0 && (
+        <div style={{ marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+            <div style={{ flex: n1, height: 4, background: '#2dd4a8', borderRadius: 2 }} />
+            <div style={{ flex: Math.max(1, n2), height: 4, background: '#4f9cf9', borderRadius: 2 }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8 }}>
+            <span style={{ color: '#2dd4a8' }}>{actualP1}%</span>
+            <span style={{ color: '#4f9cf9' }}>{actualP2}%</span>
+          </div>
+        </div>
+      )}
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 8 }}>
         <p style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Theory</p>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -72,18 +85,15 @@ const DetectionOverlay = ({ isResearch }) => {
           <span>Visibility:</span><span style={{ color: '#fff' }}>{(vis * 100).toFixed(1)}%</span>
         </div>
       </div>
-      {isResearch && (
+      {isResearch && total > 10 && (
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 8 }}>
           <p style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-            Actual / Expected
+            Δ(sim − theory)
           </p>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>N₁/N_total:</span><span style={{ color: '#fff' }}>{(n1 / (n1 + n2 + 1) * 100).toFixed(1)}%</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Δ(actual-theory):</span>
-            <span style={{ color: Math.abs(n1 / (n1 + n2 + 1) - p1) < 0.05 ? '#4f4' : '#f84' }}>
-              {((n1 / (n1 + n2 + 1) - p1) * 100).toFixed(2)}%
+            <span>D₁:</span>
+            <span style={{ color: Math.abs(parseFloat(delta)) < 5 ? '#4f4' : '#f84' }}>
+              {delta}%
             </span>
           </div>
         </div>
@@ -124,59 +134,74 @@ const BeginnerBottomBar = () => {
   );
 };
 
-/** Component Toolbar — add optical elements to the setup */
+const TOOLBAR_ITEMS = [
+  { label: 'M1', desc: 'Mirror 1 — Toggle tip angle (3×10⁻⁴ rad). Changes fringe tilt on detector.', paramKey: 'mirror1Tip', toggle: [0, 3e-4] },
+  { label: 'M2', desc: 'Mirror 2 — Toggle tip angle (2×10⁻⁴ rad). Creates asymmetric fringe pattern.', paramKey: 'mirror2Tip', toggle: [0, 2e-4] },
+  { label: 'CP', desc: 'Compensator Plate — Equalizes optical path through BS glass. Essential for white-light fringes.', paramKey: 'compensatorEnabled', isToggle: true },
+  { label: 'GW', desc: 'Gravitational Wave — Inject h₀=10⁻²¹ strain signal. Simulates LIGO-like detection.', paramKey: 'gwEnabled', isToggle: true },
+  { label: '🔊', desc: 'Seismic Noise — Ground vibration coupling at ~15 Hz. Adds position jitter to mirrors.', paramKey: 'seismicNoiseEnabled', isToggle: true },
+  { label: '🌡', desc: 'Thermal Drift — Temperature-driven path changes via CTE of mirror substrates.', paramKey: 'thermalDriftEnabled', isToggle: true },
+];
+
 const ComponentToolbar = () => {
   const setParam = useSimulationStore((s) => s.setParam);
-  const compensatorEnabled = useSimulationStore((s) => s.compensatorEnabled);
-
   return (
-    <div style={{
-      position: 'absolute', top: 12, right: 12, zIndex: 10,
-      display: 'flex', gap: 6,
-    }}>
-      <ToolbarBtn label="M1" tooltip="Toggle Mirror 1 tip"
-        onClick={() => {
-          const s = useSimulationStore.getState();
-          setParam('mirror1Tip', s.mirror1Tip === 0 ? 3e-4 : 0);
-        }} />
-      <ToolbarBtn label="M2" tooltip="Toggle Mirror 2 tip"
-        onClick={() => {
-          const s = useSimulationStore.getState();
-          setParam('mirror2Tip', s.mirror2Tip === 0 ? 2e-4 : 0);
-        }} />
-      <ToolbarBtn label="CP" tooltip="Toggle Compensator Plate" active={compensatorEnabled}
-        onClick={() => setParam('compensatorEnabled', !compensatorEnabled)} />
-      <ToolbarBtn label="GW" tooltip="Toggle GW injection"
-        onClick={() => {
-          const s = useSimulationStore.getState();
-          setParam('gwEnabled', !s.gwEnabled);
-        }} />
-      <ToolbarBtn label="🔊" tooltip="Toggle seismic noise"
-        onClick={() => {
-          const s = useSimulationStore.getState();
-          setParam('seismicNoiseEnabled', !s.seismicNoiseEnabled);
-        }} />
-      <ToolbarBtn label="🌡" tooltip="Toggle thermal drift"
-        onClick={() => {
-          const s = useSimulationStore.getState();
-          setParam('thermalDriftEnabled', !s.thermalDriftEnabled);
-        }} />
+    <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, display: 'flex', gap: 6 }}>
+      {TOOLBAR_ITEMS.map(item => (
+        <ToolbarBtn key={item.label} {...item} setParam={setParam} />
+      ))}
     </div>
   );
 };
 
-const ToolbarBtn = ({ label, tooltip, onClick, active }) => (
-  <button onClick={onClick} title={tooltip} style={{
-    padding: '5px 10px', fontSize: 9, fontWeight: 700,
-    background: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)',
-    border: `1px solid rgba(255,255,255,${active ? 0.4 : 0.1})`,
-    borderRadius: 6, cursor: 'pointer', color: '#fff',
-    fontFamily: 'var(--font-mono)', letterSpacing: '0.05em',
-    transition: 'all 150ms',
-  }}>
-    {label}
-  </button>
-);
+const ToolbarBtn = ({ label, desc, paramKey, toggle, isToggle, setParam }) => {
+  const [hovered, setHovered] = useState(false);
+  const active = useSimulationStore((s) => isToggle ? s[paramKey] : (toggle ? s[paramKey] !== toggle[0] : false));
+
+  const handleClick = () => {
+    if (isToggle) {
+      setParam(paramKey, !useSimulationStore.getState()[paramKey]);
+    } else if (toggle) {
+      const cur = useSimulationStore.getState()[paramKey];
+      setParam(paramKey, cur === toggle[0] ? toggle[1] : toggle[0]);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative' }}
+      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <button onClick={handleClick} style={{
+        padding: '5px 10px', fontSize: 9, fontWeight: 700,
+        background: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)',
+        border: `1px solid rgba(255,255,255,${active ? 0.4 : 0.1})`,
+        borderRadius: 6, cursor: 'pointer', color: '#fff',
+        fontFamily: 'var(--font-mono)', letterSpacing: '0.05em',
+        transition: 'all 150ms',
+      }}>
+        {label}
+      </button>
+      {hovered && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6,
+          width: 220, padding: '10px 12px',
+          background: 'rgba(20,24,36,0.85)',
+          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 8, zIndex: 20,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          pointerEvents: 'none',
+        }}>
+          <p style={{ fontSize: 10, fontWeight: 700, color: '#fff', marginBottom: 4, letterSpacing: '0.05em' }}>
+            {label} — {active ? 'ACTIVE' : 'OFF'}
+          </p>
+          <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+            {desc}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const App = () => {
   const isResearchMode = useSimulationStore((s) => s.isResearchMode);

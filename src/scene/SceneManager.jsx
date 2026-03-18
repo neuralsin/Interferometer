@@ -107,6 +107,7 @@ const SceneManager = () => {
     sim.d1 = 0; sim.d2 = 0; sim.fired = 0;
     sim.photons = []; sim.flashes = [];
     sim.autoQ = 0; sim.continuous = false;
+    useSimulationStore.getState().resetSimCounts();
     forceRender(r => r + 1);
   }, []);
 
@@ -392,6 +393,8 @@ const SceneManager = () => {
           if (ph.progress >= 1) {
             if (ph.goD1) sim.d1++; else sim.d2++;
             sim.fired++;
+            // Push to store so DetectionOverlay updates
+            useSimulationStore.getState().incSimCount(ph.goD1 ? 1 : 2);
             sim.flashes.push({ age: 0, d1: ph.goD1 });
             return false;
           }

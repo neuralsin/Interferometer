@@ -111,6 +111,11 @@ const DEFAULT_PARAMS = {
 
   /* ===== LEGACY COMPAT ===== */
   mountMaterial:     'invar',
+
+  /* ===== LIVE SIM COUNTS (from SceneManager particle sim) ===== */
+  simD1: 0,
+  simD2: 0,
+  simFired: 0,
 };
 
 const useSimulationStore = create((set, get) => ({
@@ -120,6 +125,11 @@ const useSimulationStore = create((set, get) => ({
   setMultipleParams: (params) => set(params),
   toggleResearchMode: () => set((s) => ({ isResearchMode: !s.isResearchMode })),
   resetToDefaults: () => set(DEFAULT_PARAMS),
+  incSimCount: (detector) => set((s) => ({
+    [detector === 1 ? 'simD1' : 'simD2']: s[detector === 1 ? 'simD1' : 'simD2'] + 1,
+    simFired: s.simFired + 1,
+  })),
+  resetSimCounts: () => set({ simD1: 0, simD2: 0, simFired: 0 }),
 
   /* ===== DERIVED GETTERS (real physics) ===== */
 
