@@ -1,0 +1,557 @@
+
+<style>
+  h3{font-size:15px;font-weight:500;margin:0 0 10px;color:var(--color-text-primary);}
+  .section{margin-bottom:14px;}
+  .ctrl{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .ctrl label{font-size:13px;color:var(--color-text-secondary);width:195px;flex-shrink:0;}
+  .ctrl input[type=range]{flex:1;}
+  .ctrl span{font-size:13px;font-weight:500;min-width:88px;text-align:right;color:var(--color-text-primary);}
+  .gas-tabs{display:flex;gap:8px;margin-bottom:12px;}
+  .tab{padding:5px 16px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);cursor:pointer;font-size:13px;font-weight:500;transition:all 0.15s;}
+  .tab[data-gas="air"].active{background:#E6F1FB;color:#185FA5;border-color:transparent;}
+  .tab[data-gas="he"].active{background:#E1F5EE;color:#0F6E56;border-color:transparent;}
+  .tab[data-gas="ar"].active{background:#FAECE7;color:#993C1D;border-color:transparent;}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+  .mcard{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px 10px;}
+  .mcard .ml{font-size:11px;color:var(--color-text-secondary);margin-bottom:2px;}
+  .mcard .mv{font-size:13px;font-weight:500;color:var(--color-text-primary);}
+  .divider{border:none;border-top:0.5px solid var(--color-border-tertiary);margin:12px 0;}
+  .arow{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;}
+  .animBtn{font-size:12px;padding:4px 12px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-primary);cursor:pointer;}
+  .animBtn:hover{background:var(--color-background-secondary);}
+  .animBtn.active{background:var(--color-background-info);color:var(--color-text-info);border-color:transparent;}
+  .animBtn.on{background:#E1F5EE;color:#0F6E56;border-color:transparent;}
+  .two-col{display:grid;grid-template-columns:3fr 2fr;gap:12px;}
+  .panel{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px;}
+  .panel canvas{display:block;width:100%;border-radius:6px;}
+  .plabel{font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:5px;}
+  .intbadge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:4px 12px;border-radius:20px;margin-right:6px;}
+</style>
+
+<div style="padding:0.75rem 0;">
+  <div class="section">
+    <h3>Gas in cell</h3>
+    <div class="gas-tabs">
+      <div class="tab active" data-gas="air">Air</div>
+      <div class="tab" data-gas="he">Helium</div>
+      <div class="tab" data-gas="ar">Argon</div>
+    </div>
+    <div class="ctrl"><label>Pressure P (atm)</label><input type="range" id="pres" min="0.1" max="10" step="0.1" value="1"><span id="pres-out">1.0 atm</span></div>
+    <div class="ctrl"><label>Cell length Lc (cm)</label><input type="range" id="Lc" min="1" max="30" step="0.5" value="5"><span id="Lc-out">5.0 cm</span></div>
+  </div>
+  <hr class="divider">
+  <div class="section">
+    <h3>Interferometer optics</h3>
+    <div class="ctrl"><label>Wavelength λ (nm)</label><input type="range" id="lambda" min="400" max="750" step="1" value="633"><span id="lambda-out">633 nm</span></div>
+    <div class="ctrl"><label>Mirror tilt θ (mrad)</label><input type="range" id="tilt" min="0" max="5" step="0.01" value="0"><span id="tilt-out">0.00 mrad</span></div>
+    <div class="ctrl"><label>M2 position Δd (μm)</label><input type="range" id="mirpos" min="-50" max="50" step="0.1" value="0"><span id="mirpos-out">0.0 μm</span></div>
+    <div class="ctrl"><label>Curvature factor</label><input type="range" id="curv" min="0.05" max="2" step="0.05" value="0.5"><span id="curv-out">0.50</span></div>
+  </div>
+  <hr class="divider">
+  <div class="section">
+    <h3>Wave animation</h3>
+    <div class="ctrl"><label>Wave animation speed</label><input type="range" id="wavespeed" min="0.1" max="5" step="0.05" value="1.2"><span id="wavespeed-out">1.2×</span></div>
+    <div class="ctrl"><label>Wave amplitude</label><input type="range" id="waveamp" min="3" max="20" step="0.5" value="11"><span id="waveamp-out">11 px</span></div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    <span style="font-size:12px;color:var(--color-text-secondary);">At BS recombination:</span>
+    <span class="intbadge" id="int-badge" style="background:#E1F5EE;color:#0F6E56;">Constructive</span>
+    <span style="font-size:12px;color:var(--color-text-secondary);">Phase diff:</span>
+    <span style="font-size:12px;font-weight:500;color:var(--color-text-primary);" id="phase-diff">—</span>
+  </div>
+
+  <div class="grid3">
+    <div class="mcard"><div class="ml">n − 1 (×10⁻⁶)</div><div class="mv" id="mn">—</div></div>
+    <div class="mcard"><div class="ml">Gas OPD (nm)</div><div class="mv" id="mopd">—</div></div>
+    <div class="mcard"><div class="ml">Total fringes</div><div class="mv" id="mtotal">—</div></div>
+    <div class="mcard"><div class="ml">Mirror OPD (nm)</div><div class="mv" id="mmopd">—</div></div>
+    <div class="mcard"><div class="ml">Tilt spacing</div><div class="mv" id="mspacing">—</div></div>
+    <div class="mcard"><div class="ml">Pattern regime</div><div class="mv" id="mregime" style="font-size:11px">—</div></div>
+  </div>
+
+  <div class="arow">
+    <button class="animBtn on" id="btn-wave">Waves ON</button>
+    <button class="animBtn" id="btn-p">Animate P</button>
+    <button class="animBtn" id="btn-t">Animate tilt</button>
+    <button class="animBtn" id="btn-m">Animate M2</button>
+    <span style="font-size:11px;color:var(--color-text-secondary);" id="anim-status"></span>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <div class="plabel">Michelson interferometer — wave propagation + interference</div>
+      <canvas id="c-setup"></canvas>
+    </div>
+    <div class="panel">
+      <div class="plabel">Detector — fringe pattern</div>
+      <canvas id="c-fringe"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+const gasData={
+  air:{n0:293e-6,color:[55,138,221], label:'Air',   lc:'#185FA5',bg:'#E6F1FB'},
+  he: {n0:35e-6, color:[29,158,117], label:'Helium',lc:'#0F6E56',bg:'#E1F5EE'},
+  ar: {n0:281e-6,color:[216,90,48],  label:'Argon', lc:'#993C1D',bg:'#FAECE7'},
+};
+
+// Neon green for destructive
+const DESTR_R=57, DESTR_G=255, DESTR_B=20;
+const DESTR_HEX='#39ff14';
+const CONSTR_R=255, CONSTR_G=230, CONSTR_B=80;
+const CONSTR_HEX='#ffe650';
+
+let selGas='air',wavesOn=true;
+let paramAnim=false,paramMode='',paramVal=0;
+let waveT=0,rafId=null;
+
+const cs=document.getElementById('c-setup');
+const cf=document.getElementById('c-fringe');
+const sctx=cs.getContext('2d');
+const fctx=cf.getContext('2d');
+
+function resize(){
+  const pw=cs.parentElement.clientWidth-16;
+  cs.width=pw; cs.height=Math.round(pw*0.60);
+  const fw=cf.parentElement.clientWidth-16;
+  cf.width=fw; cf.height=fw;
+}
+resize();
+window.addEventListener('resize',resize);
+
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active'); selGas=t.dataset.gas;
+  });
+});
+
+function gP(){
+  return{
+    pres:      +document.getElementById('pres').value,
+    Lc:        +document.getElementById('Lc').value*0.01,
+    lambda:    +document.getElementById('lambda').value*1e-9,
+    tilt:      +document.getElementById('tilt').value*1e-3,
+    curv:      +document.getElementById('curv').value,
+    mirpos:    +document.getElementById('mirpos').value*1e-6,
+    wavespeed: +document.getElementById('wavespeed').value,
+    waveamp:   +document.getElementById('waveamp').value,
+  };
+}
+
+function updateLabels(){
+  document.getElementById('pres-out').textContent      =(+document.getElementById('pres').value).toFixed(1)+' atm';
+  document.getElementById('Lc-out').textContent        =(+document.getElementById('Lc').value).toFixed(1)+' cm';
+  document.getElementById('lambda-out').textContent    =document.getElementById('lambda').value+' nm';
+  document.getElementById('tilt-out').textContent      =(+document.getElementById('tilt').value).toFixed(2)+' mrad';
+  document.getElementById('mirpos-out').textContent    =(+document.getElementById('mirpos').value).toFixed(1)+' μm';
+  document.getElementById('curv-out').textContent      =(+document.getElementById('curv').value).toFixed(2);
+  document.getElementById('wavespeed-out').textContent =(+document.getElementById('wavespeed').value).toFixed(2)+'×';
+  document.getElementById('waveamp-out').textContent   =(+document.getElementById('waveamp').value).toFixed(1)+' px';
+}
+
+function lambdaToRGB(nm){
+  let r=0,g=0,b=0;
+  if(nm>=380&&nm<440){r=(440-nm)/60;b=1;}
+  else if(nm>=440&&nm<490){g=(nm-440)/50;b=1;}
+  else if(nm>=490&&nm<510){g=1;b=(510-nm)/20;}
+  else if(nm>=510&&nm<580){r=(nm-510)/70;g=1;}
+  else if(nm>=580&&nm<645){r=1;g=(645-nm)/65;}
+  else if(nm>=645&&nm<=750){r=1;}
+  const f=nm<420?0.3+0.7*(nm-380)/40:nm>700?0.3+0.7*(750-nm)/50:1;
+  return[Math.round(r*f*255),Math.round(g*f*255),Math.round(b*f*255)];
+}
+
+function drawWave(x1,y1,x2,y2,phOff,r,g,b,alpha,spd,amp){
+  const dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy);
+  if(len<2) return;
+  const ux=dx/len,uy=dy/len,px=-uy,py=ux,freq=0.07;
+  sctx.save();
+  sctx.beginPath();
+  for(let i=0;i<=len;i+=1){
+    const w=Math.sin(i*freq-waveT*spd+phOff)*amp;
+    sctx.lineTo(x1+ux*i+px*w,y1+uy*i+py*w);
+  }
+  sctx.strokeStyle=`rgba(${r},${g},${b},${alpha})`;
+  sctx.lineWidth=2.2;sctx.lineJoin='round';sctx.lineCap='round';sctx.stroke();
+  sctx.restore();
+}
+
+function drawBeamStatic(x1,y1,x2,y2,r,g,b,alpha){
+  sctx.save();
+  sctx.strokeStyle=`rgba(${r},${g},${b},${alpha})`;
+  sctx.lineWidth=1.5;sctx.setLineDash([5,3]);
+  sctx.beginPath();sctx.moveTo(x1,y1);sctx.lineTo(x2,y2);sctx.stroke();
+  sctx.setLineDash([]);sctx.restore();
+}
+
+function mirrorBox(x,y,w,h,rx,fill,stroke,lw){
+  sctx.fillStyle=fill;sctx.strokeStyle=stroke;sctx.lineWidth=lw;
+  sctx.beginPath();sctx.roundRect(x,y,w,h,rx);sctx.fill();sctx.stroke();
+}
+
+function drawIntHalo(x,y,isConstructive,radius,alpha){
+  const grad=sctx.createRadialGradient(x,y,0,x,y,radius);
+  if(isConstructive){
+    grad.addColorStop(0,`rgba(${CONSTR_R},${CONSTR_G},${CONSTR_B},${alpha})`);
+    grad.addColorStop(0.4,`rgba(${CONSTR_R},${CONSTR_G},${CONSTR_B},${alpha*0.5})`);
+    grad.addColorStop(1,'rgba(255,200,0,0)');
+  } else {
+    grad.addColorStop(0,`rgba(${DESTR_R},${DESTR_G},${DESTR_B},${alpha})`);
+    grad.addColorStop(0.45,`rgba(${DESTR_R},${DESTR_G},${DESTR_B},${alpha*0.5})`);
+    grad.addColorStop(1,`rgba(${DESTR_R},${DESTR_G},${DESTR_B},0)`);
+  }
+  sctx.save();
+  sctx.beginPath();sctx.arc(x,y,radius,0,Math.PI*2);
+  sctx.fillStyle=grad;sctx.fill();
+  sctx.restore();
+}
+
+function drawSetup(p){
+  const W=cs.width,H=cs.height;
+  const isDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const bg=isDark?'#111':'#fafaf8';
+  const col=isDark?'#ddd':'#333';
+  const muted=isDark?'#666':'#aaa';
+  const gas=gasData[selGas];
+  const nM1=gas.n0*p.pres;
+  const n=1+nM1;
+
+  sctx.fillStyle=bg;sctx.fillRect(0,0,W,H);
+
+  const lnm=p.lambda*1e9;
+  const[lr,lg,lb]=lambdaToRGB(lnm);
+  const[gr,gg,gb]=gas.color;
+  const recR=Math.round((lr+gr)/2),recG=Math.round((lg+gg)/2),recB=Math.round((lb+gb)/2);
+  const baseSpeed=p.wavespeed;
+  const gasSpeed=baseSpeed/n;
+  const phMir=p.mirpos*1e6*0.12;
+  const AMP=p.waveamp;
+
+  const gasOPD=2*(n-1)*p.Lc;
+  const mirOPD=2*p.mirpos;
+  const totalOPD=gasOPD+mirOPD;
+  const phaseDiff=(2*Math.PI/p.lambda)*totalOPD;
+  const phaseMod=((phaseDiff%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
+  const cosVal=(Math.cos(phaseMod)+1)/2;
+  const isConstructive=cosVal>0.5;
+  const intStrength=isConstructive?cosVal:(1-cosVal);
+
+  // Badge update
+  const badge=document.getElementById('int-badge');
+  if(cosVal>0.75){
+    badge.textContent='Constructive';
+    badge.style.background='rgba(255,230,80,0.25)';
+    badge.style.color='#856000';
+  } else if(cosVal<0.25){
+    badge.textContent='Destructive';
+    badge.style.background='rgba(57,255,20,0.18)';
+    badge.style.color='#1a7a00';
+  } else {
+    badge.textContent='Partial';
+    badge.style.background='#FAEEDA';
+    badge.style.color='#633806';
+  }
+  document.getElementById('phase-diff').textContent=
+    (phaseMod/(2*Math.PI)).toFixed(3)+'λ ('+((phaseMod*180/Math.PI).toFixed(1))+'°)';
+
+  const bsX=Math.round(W*0.42),bsY=Math.round(H*0.46);
+  const laserX=14,laserY=bsY;
+  const m1Y=16;
+  const m2BaseX=W-52,m2Y=bsY;
+  const m2X=Math.round(m2BaseX+p.mirpos*1e6*0.45);
+  const detX=bsX,detY=H-14;
+  const tiltDeg=p.tilt*1e3;
+
+  const gasBoxW=Math.max(28,Math.min(80,p.Lc*680));
+  const gasBoxX=bsX+26,gasBoxY=bsY-13;
+  sctx.fillStyle=isDark?gas.bg+'22':gas.bg+'66';
+  sctx.strokeStyle=gas.lc+'99';sctx.lineWidth=1;
+  sctx.setLineDash([3,2]);
+  sctx.fillRect(gasBoxX,gasBoxY,gasBoxW,26);
+  sctx.strokeRect(gasBoxX,gasBoxY,gasBoxW,26);
+  sctx.setLineDash([]);
+  sctx.fillStyle=gas.lc;sctx.font='500 9px sans-serif';sctx.textAlign='center';
+  sctx.fillText(gas.label,gasBoxX+gasBoxW/2,gasBoxY+16);
+  sctx.fillStyle=gas.lc;sctx.font='8px sans-serif';
+  sctx.fillText('v=c/'+n.toFixed(6),gasBoxX+gasBoxW/2,gasBoxY-5);
+
+  const gEnd=gasBoxX+gasBoxW;
+
+  // Halos at M1
+  const m1Pulse=(Math.sin(waveT*baseSpeed+3.1+phMir)+1)/2;
+  drawIntHalo(bsX,m1Y+11,true,28,0.15+m1Pulse*0.5);
+
+  // Halo at M2 — neon green for destructive
+  const m2Pulse=(Math.sin(waveT*baseSpeed+phMir)+1)/2;
+  drawIntHalo(m2X,m2Y,isConstructive,34,0.15+m2Pulse*0.55);
+
+  // Large halo at BS recombination
+  drawIntHalo(bsX,bsY,isConstructive,34+intStrength*22,0.28+intStrength*0.55);
+
+  // Detector halo
+  drawIntHalo(detX,detY-10,isConstructive,28+cosVal*14,0.2+cosVal*0.6);
+
+  if(wavesOn){
+    drawWave(laserX+30,laserY,bsX-8,bsY,      0,        lr,lg,lb,0.9,baseSpeed,AMP);
+    drawWave(bsX,bsY-8,bsX,m1Y+22,            1.1,      lr,lg,lb,0.85,baseSpeed,AMP);
+    drawWave(bsX,m1Y+22,bsX,bsY-8,            3.1+phMir,gr,gg,gb,0.75,baseSpeed,AMP);
+    drawWave(bsX+8,bsY,gasBoxX,bsY,           1.6,      lr,lg,lb,0.85,baseSpeed,AMP);
+    drawWave(gasBoxX,bsY,gEnd,bsY,            1.6,      gr,gg,gb,0.85,gasSpeed,AMP*0.7);
+    drawWave(gEnd,bsY,m2X-16,bsY,             1.6,      lr,lg,lb,0.85,baseSpeed,AMP);
+    drawWave(m2X-16,bsY,gEnd,bsY,             3.1+phMir,lr,lg,lb,0.6,baseSpeed,AMP);
+    drawWave(gEnd,bsY,gasBoxX,bsY,            3.1+phMir,gr,gg,gb,0.6,gasSpeed,AMP*0.7);
+    drawWave(gasBoxX,bsY,bsX+8,bsY,           3.1+phMir,lr,lg,lb,0.6,baseSpeed,AMP);
+
+    // Recombined beam — colour shifts to neon green when destructive
+    const recAlpha=0.4+cosVal*0.55;
+    const recAmp=AMP*(0.3+cosVal*0.9);
+    const beamR=isConstructive?recR:Math.round(recR*(1-intStrength)+DESTR_R*intStrength);
+    const beamG=isConstructive?recG:Math.round(recG*(1-intStrength)+DESTR_G*intStrength);
+    const beamB=isConstructive?recB:Math.round(recB*(1-intStrength)+DESTR_B*intStrength);
+    drawWave(bsX,bsY+8,detX,detY-22,2.2+phMir,beamR,beamG,beamB,recAlpha,baseSpeed,recAmp);
+
+    // M1 mirror pulse
+    const m1p=Math.abs(Math.sin(waveT*baseSpeed*0.7));
+    sctx.save();sctx.globalAlpha=0.25+m1p*0.35;
+    sctx.strokeStyle=`rgba(${lr},${lg},${lb},1)`;
+    sctx.lineWidth=4+m1p*6;sctx.lineCap='round';
+    sctx.beginPath();sctx.moveTo(bsX-2,m1Y+22);sctx.lineTo(bsX+2,m1Y+22);sctx.stroke();
+    sctx.restore();
+
+    // M2 mirror surface flash — neon green when destructive
+    const m2p=Math.abs(Math.sin(waveT*baseSpeed*0.7+phMir));
+    const m2StrokeColor=isConstructive
+      ?`rgba(${CONSTR_R},${CONSTR_G},${CONSTR_B},1)`
+      :`rgba(${DESTR_R},${DESTR_G},${DESTR_B},1)`;
+    sctx.save();sctx.globalAlpha=isConstructive?(0.2+m2p*0.5):(0.25+m2p*0.6);
+    sctx.strokeStyle=m2StrokeColor;
+    sctx.lineWidth=4+m2p*8;sctx.lineCap='round';
+    sctx.beginPath();sctx.moveTo(m2X-5,m2Y-22);sctx.lineTo(m2X-5,m2Y+22);sctx.stroke();
+    sctx.restore();
+
+    // Labels at M2 and BS
+    const intLabel=cosVal>0.75?'+ constr.':cosVal<0.25?'− destr.':'~ partial';
+    const intColor=cosVal>0.75?CONSTR_HEX:cosVal<0.25?DESTR_HEX:'#BA7517';
+    sctx.fillStyle=intColor;sctx.font='500 8px sans-serif';sctx.textAlign='center';
+    sctx.fillText(intLabel,m2X+3,m2Y+58);
+
+    sctx.fillStyle=isConstructive?CONSTR_HEX:DESTR_HEX;
+    sctx.font='500 8px sans-serif';sctx.textAlign='left';
+    sctx.fillText(isConstructive?'⊕ constr.':'⊖ destr.',bsX+10,bsY-10);
+
+  } else {
+    drawBeamStatic(laserX+30,laserY,bsX-8,bsY,  lr,lg,lb,0.7);
+    drawBeamStatic(bsX,bsY-8,bsX,m1Y+22,        lr,lg,lb,0.6);
+    drawBeamStatic(bsX,m1Y+22,bsX,bsY-8,        gr,gg,gb,0.5);
+    drawBeamStatic(bsX+8,bsY,m2X-16,bsY,        lr,lg,lb,0.6);
+    drawBeamStatic(m2X-16,bsY,bsX+8,bsY,        gr,gg,gb,0.5);
+    drawBeamStatic(bsX,bsY+8,detX,detY-22,       recR,recG,recB,0.8);
+  }
+
+  // Components
+  mirrorBox(laserX,laserY-13,30,26,4,isDark?'#1a2a40':'#deeeff','#378ADD',1.5);
+  sctx.fillStyle='#185FA5';sctx.font='500 9px sans-serif';sctx.textAlign='center';
+  sctx.fillText('Laser',laserX+15,laserY+4);
+
+  sctx.save();
+  sctx.translate(bsX,bsY);sctx.rotate(Math.PI/4);
+  sctx.fillStyle=isDark?'rgba(100,180,255,0.18)':'rgba(100,180,255,0.32)';
+  sctx.strokeStyle='#378ADD';sctx.lineWidth=1.5;
+  sctx.fillRect(-14,-2,28,4);sctx.strokeRect(-14,-2,28,4);
+  sctx.restore();
+  sctx.fillStyle=muted;sctx.font='9px sans-serif';sctx.textAlign='left';
+  sctx.fillText('BS',bsX+8,bsY+6);
+
+  mirrorBox(bsX-18,m1Y,36,22,2,isDark?'#1a2a3a':'#d8ecff','#378ADD',2);
+  sctx.fillStyle=muted;sctx.font='9px sans-serif';sctx.textAlign='center';
+  sctx.fillText('M1 (fixed)',bsX,m1Y+36);
+
+  sctx.save();
+  sctx.translate(m2X,m2Y);sctx.rotate(tiltDeg*0.09);
+  mirrorBox(-5,-22,16,44,2,isDark?'#3a1a1a':'#ffe8e4','#E24B4A',2);
+  sctx.restore();
+  sctx.fillStyle='#A32D2D';sctx.font='500 9px sans-serif';sctx.textAlign='center';
+  sctx.fillText('M2',m2X+3,m2Y+33);
+  sctx.fillStyle=muted;sctx.font='8px sans-serif';
+  sctx.fillText((p.mirpos*1e6>=0?'+':'')+(p.mirpos*1e6).toFixed(1)+'μm',m2X+3,m2Y+44);
+
+  if(tiltDeg>0.05){
+    sctx.save();sctx.translate(m2X+3,m2Y-24);
+    sctx.strokeStyle='#E24B4A';sctx.lineWidth=0.8;sctx.setLineDash([2,2]);
+    sctx.beginPath();sctx.moveTo(0,0);sctx.lineTo(0,-13);sctx.stroke();
+    sctx.setLineDash([]);
+    sctx.beginPath();sctx.arc(0,0,10,-Math.PI/2,-Math.PI/2+tiltDeg*0.09);
+    sctx.strokeStyle='#E24B4A';sctx.lineWidth=1;sctx.stroke();
+    sctx.fillStyle='#A32D2D';sctx.font='8px sans-serif';sctx.textAlign='left';
+    sctx.fillText(tiltDeg.toFixed(1)+'mr',13,-5);
+    sctx.restore();
+  }
+
+  // Detector — gold when constructive, neon green when destructive
+  const detFillC=isConstructive
+    ?`rgba(255,220,60,${0.2+cosVal*0.35})`
+    :`rgba(${DESTR_R},${DESTR_G},${DESTR_B},${0.15+intStrength*0.35})`;
+  mirrorBox(detX-22,detY-20,44,20,3,detFillC,'#1D9E75',1.5);
+  sctx.fillStyle='#0F6E56';sctx.font='500 9px sans-serif';sctx.textAlign='center';
+  sctx.fillText('Detector',detX,detY-6);
+  sctx.fillStyle=muted;sctx.font='8px sans-serif';
+  sctx.fillText('(output)',detX,detY+10);
+
+  sctx.fillStyle=col;sctx.font='500 10px sans-serif';sctx.textAlign='left';
+  sctx.fillText('λ='+Math.round(p.lambda*1e9)+'nm  spd='+baseSpeed.toFixed(2)+'×',6,14);
+
+  if(wavesOn){
+    const legs=[
+      {r:lr,  g:lg,  b:lb,              l:'Arm 1 — M1 (v=c)'},
+      {r:gr,  g:gg,  b:gb,              l:'Arm 2 — M2/gas (v=c/n)'},
+      {r:recR,g:recG,b:recB,            l:'Recombined → Det'},
+      {r:CONSTR_R,g:CONSTR_G,b:CONSTR_B,l:'Constructive glow'},
+      {r:DESTR_R, g:DESTR_G, b:DESTR_B, l:'Destructive glow'},
+    ];
+    const lx=W-148;
+    legs.forEach((lg2,i)=>{
+      const ly=12+i*14;
+      sctx.strokeStyle=`rgba(${lg2.r},${lg2.g},${lg2.b},0.9)`;
+      sctx.lineWidth=i>=3?5:2.2;
+      sctx.beginPath();sctx.moveTo(lx,ly);sctx.lineTo(lx+16,ly);sctx.stroke();
+      sctx.fillStyle=col;sctx.font='9px sans-serif';sctx.textAlign='left';
+      sctx.fillText(lg2.l,lx+20,ly+3);
+    });
+  }
+}
+
+function drawFringe(p){
+  const W=cf.width,H=cf.height;
+  const gas=gasData[selGas];
+  const lam=p.lambda;
+  const nM1=gas.n0*p.pres;
+  const gasOPD=2*nM1*p.Lc;
+  const mirOPD=2*p.mirpos;
+  const totalOPD=gasOPD+mirOPD;
+  const totalFringes=totalOPD/lam;
+  const tiltSpacing=p.tilt>1e-5?lam/(2*p.tilt):Infinity;
+  let regime;
+  if(p.tilt*1e3<0.05) regime='Circular';
+  else if(p.tilt*1e3<0.5) regime='Curved';
+  else if(p.tilt*1e3<2) regime='Straight';
+  else regime='Dense';
+
+  document.getElementById('mn').textContent      =(nM1*1e6).toFixed(1);
+  document.getElementById('mopd').textContent    =(gasOPD*1e9).toFixed(2);
+  document.getElementById('mtotal').textContent  =totalFringes.toFixed(3);
+  document.getElementById('mmopd').textContent   =(mirOPD*1e9).toFixed(1);
+  document.getElementById('mspacing').textContent=p.tilt>1e-5?(tiltSpacing*1e3).toFixed(2)+' mm':'∞';
+  document.getElementById('mregime').textContent =regime;
+
+  const lnm=p.lambda*1e9;
+  const[lr,lg,lb]=lambdaToRGB(lnm);
+  const img=fctx.createImageData(W,H);
+  const midX=W/2,midY=H/2,scX=0.01/W;
+
+  for(let py=0;py<H;py++){
+    for(let px=0;px<W;px++){
+      const x=(px-midX)*scX,y=(py-midY)*scX;
+      const R2=x*x+y*y;
+      const curvP=p.tilt<5e-5?(2*Math.PI/lam)*(R2/p.curv):0;
+      const tiltP=(2*Math.PI/lam)*2*p.tilt*x;
+      const totP=(2*Math.PI/lam)*totalOPD;
+      const I=(1+Math.cos(totP+tiltP+curvP))/2;
+      const I2=I*I;
+      const idx=(py*W+px)*4;
+      img.data[idx]  =Math.min(255,Math.round(I2*lr*1.15));
+      img.data[idx+1]=Math.min(255,Math.round(I2*lg*1.15));
+      img.data[idx+2]=Math.min(255,Math.round(I2*lb*1.15));
+      img.data[idx+3]=255;
+    }
+  }
+  fctx.putImageData(img,0,0);
+
+  fctx.fillStyle=gas.bg;fctx.strokeStyle=gas.lc;fctx.lineWidth=1;
+  fctx.beginPath();fctx.roundRect(8,8,68,20,10);fctx.fill();fctx.stroke();
+  fctx.fillStyle=gas.lc;fctx.font='500 10px sans-serif';fctx.textAlign='left';
+  fctx.fillText(gas.label,14,22);
+
+  const mval=(p.mirpos*1e6).toFixed(1);
+  fctx.fillStyle='rgba(226,75,74,0.12)';fctx.strokeStyle='#E24B4A';fctx.lineWidth=1;
+  fctx.beginPath();fctx.roundRect(W-90,8,82,20,10);fctx.fill();fctx.stroke();
+  fctx.fillStyle='#A32D2D';fctx.font='500 10px sans-serif';fctx.textAlign='right';
+  fctx.fillText('Δd='+(p.mirpos*1e6>=0?'+':'')+mval+'μm',W-10,22);
+
+  fctx.fillStyle='rgba(0,0,0,0.38)';fctx.fillRect(0,H-26,W,26);
+  fctx.fillStyle='rgba(255,255,255,0.75)';fctx.font='10px sans-serif';fctx.textAlign='center';
+  fctx.fillText('n−1='+(nM1*1e6).toFixed(1)+'×10⁻⁶  OPD='+(gasOPD*1e9).toFixed(1)+'nm  fringes='+totalFringes.toFixed(2)+'  '+regime,W/2,H-10);
+}
+
+function loop(){
+  const p=gP();
+  waveT+=0.016*p.wavespeed*4;
+  drawSetup(p);
+  drawFringe(p);
+  rafId=requestAnimationFrame(loop);
+}
+
+document.getElementById('btn-wave').addEventListener('click',()=>{
+  wavesOn=!wavesOn;
+  const b=document.getElementById('btn-wave');
+  b.textContent=wavesOn?'Waves ON':'Waves OFF';
+  b.classList.toggle('on',wavesOn);b.classList.toggle('active',false);
+});
+
+function stopParamAnim(){
+  paramAnim=false;paramMode='';
+  ['btn-p','btn-t','btn-m'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('btn-p').textContent='Animate P';
+  document.getElementById('btn-t').textContent='Animate tilt';
+  document.getElementById('btn-m').textContent='Animate M2';
+  document.getElementById('anim-status').textContent='';
+}
+
+function startParamAnim(mode){
+  stopParamAnim();paramAnim=true;paramMode=mode;
+  if(mode==='p'){
+    paramVal=0.1;
+    document.getElementById('btn-p').textContent='Stop P';
+    document.getElementById('btn-p').classList.add('active');
+    function sP(){if(!paramAnim||paramMode!=='p') return;
+      paramVal=+(paramVal+0.04).toFixed(2);if(paramVal>10) paramVal=0.1;
+      document.getElementById('pres').value=paramVal;
+      document.getElementById('pres-out').textContent=paramVal.toFixed(1)+' atm';
+      document.getElementById('anim-status').textContent='P = '+paramVal.toFixed(2)+' atm';
+      setTimeout(sP,28);}setTimeout(sP,28);
+  } else if(mode==='t'){
+    paramVal=0;
+    document.getElementById('btn-t').textContent='Stop tilt';
+    document.getElementById('btn-t').classList.add('active');
+    function sT(){if(!paramAnim||paramMode!=='t') return;
+      paramVal=+(paramVal+0.008).toFixed(3);if(paramVal>5) paramVal=0;
+      document.getElementById('tilt').value=paramVal;
+      document.getElementById('tilt-out').textContent=paramVal.toFixed(2)+' mrad';
+      document.getElementById('anim-status').textContent='θ = '+paramVal.toFixed(2)+' mrad';
+      setTimeout(sT,28);}setTimeout(sT,28);
+  } else {
+    paramVal=-50;let dir=1;
+    document.getElementById('btn-m').textContent='Stop M2';
+    document.getElementById('btn-m').classList.add('active');
+    function sM(){if(!paramAnim||paramMode!=='m') return;
+      paramVal=+(paramVal+dir*0.3).toFixed(2);
+      if(paramVal>=50){paramVal=50;dir=-1;}if(paramVal<=-50){paramVal=-50;dir=1;}
+      document.getElementById('mirpos').value=paramVal;
+      document.getElementById('mirpos-out').textContent=paramVal.toFixed(1)+' μm';
+      document.getElementById('anim-status').textContent='Δd = '+paramVal.toFixed(1)+' μm';
+      setTimeout(sM,28);}setTimeout(sM,28);
+  }
+}
+
+['pres','Lc','lambda','tilt','mirpos','curv','wavespeed','waveamp'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',updateLabels);
+});
+document.getElementById('btn-p').addEventListener('click',()=>{paramAnim&&paramMode==='p'?stopParamAnim():startParamAnim('p');});
+document.getElementById('btn-t').addEventListener('click',()=>{paramAnim&&paramMode==='t'?stopParamAnim():startParamAnim('t');});
+document.getElementById('btn-m').addEventListener('click',()=>{paramAnim&&paramMode==='m'?stopParamAnim():startParamAnim('m');});
+
+updateLabels();
+rafId=requestAnimationFrame(loop);
+</script>

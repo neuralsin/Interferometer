@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor, detectionProbabilities } from '../physics/basicInterference.js';
 import { fringeVisibility } from '../physics/coherenceModel.js';
@@ -55,24 +55,56 @@ const SceneManager = () => {
   });
   const dragRef = useRef({ dragging: null, offsetX: 0, offsetY: 0 });
 
-  const state = useSimulationStore();
+  // SELECTIVE subscriptions — only physics params, NOT simD1/simD2/simFired
+  // This prevents re-render cascade when photons update counts
+  const wavelength = useSimulationStore(s => s.wavelength);
+  const laserPower = useSimulationStore(s => s.laserPower);
+  const laserLinewidth = useSimulationStore(s => s.laserLinewidth);
+  const bsReflectivity = useSimulationStore(s => s.bsReflectivity);
+  const bsTransmissivity = useSimulationStore(s => s.bsTransmissivity);
+  const mirror1PosX = useSimulationStore(s => s.mirror1PosX);
+  const mirror1PosZ = useSimulationStore(s => s.mirror1PosZ);
+  const mirror2PosX = useSimulationStore(s => s.mirror2PosX);
+  const mirror2PosZ = useSimulationStore(s => s.mirror2PosZ);
+  const mirror1Tip = useSimulationStore(s => s.mirror1Tip);
+  const mirror2Tip = useSimulationStore(s => s.mirror2Tip);
+  const mirror1Reflectivity = useSimulationStore(s => s.mirror1Reflectivity);
+  const mirror2Reflectivity = useSimulationStore(s => s.mirror2Reflectivity);
+  const m1Enabled = useSimulationStore(s => s.m1Enabled);
+  const m2Enabled = useSimulationStore(s => s.m2Enabled);
+  const bs2Enabled = useSimulationStore(s => s.bs2Enabled);
+  const compensatorEnabled = useSimulationStore(s => s.compensatorEnabled);
+  const compensatorRefractiveIndex = useSimulationStore(s => s.compensatorRefractiveIndex);
+  const compensatorThickness = useSimulationStore(s => s.compensatorThickness);
+  const bsRefractiveIndex = useSimulationStore(s => s.bsRefractiveIndex);
+  const bsThickness = useSimulationStore(s => s.bsThickness);
+  const simulationPaused = useSimulationStore(s => s.simulationPaused);
 
-  const INPUT = { x: 40, y: positions.BS1.y };
-  const D1 = { x: positions.BS2.x, y: 30 };
-  const D2 = { x: 660, y: positions.BS2.y };
+  const INPUT = useMemo(() => ({ x: 40, y: positions.BS1.y }), [positions.BS1.y]);
+  const D1 = useMemo(() => ({ x: positions.BS2.x, y: 30 }), [positions.BS2.x]);
+  const D2 = useMemo(() => ({ x: 660, y: positions.BS2.y }), [positions.BS2.y]);
 
-  // Arm lengths from geometry
-  const arm1Len = Math.hypot(positions.M1.x - positions.BS1.x, positions.M1.y - positions.BS1.y)
-                + Math.hypot(positions.BS2.x - positions.M1.x, positions.BS2.y - positions.M1.y);
-  const arm2Len = Math.hypot(positions.PS.x - positions.BS1.x, positions.PS.y - positions.BS1.y)
-                + Math.hypot(positions.M2.x - positions.PS.x, positions.M2.y - positions.PS.y)
-                + Math.hypot(positions.BS2.x - positions.M2.x, positions.BS2.y - positions.M2.y);
-  const scale = 0.0005;
-  const armXphys = arm1Len * scale;
-  const armYphys = arm2Len * scale;
-  const mirrorTipOPD = (state.mirror1Tip + state.mirror2Tip) * armXphys;
-  const compensatorOPD = state.compensatorEnabled ? 0 : (state.bsRefractiveIndex - 1) * state.bsThickness;
-  const opd = (armXphys - armYphys) + mirrorTipOPD + compensatorOPD;
+  // Arm lengths from canvas (for DISPLAY only)
+  const arm1LenPx = Math.hypot(positions.M1.x - positions.BS1.x, positions.M1.y - positions.BS1.y)
+                   + Math.hypot(positions.BS2.x - positions.M1.x, positions.BS2.y - positions.M1.y);
+  const arm2LenPx = Math.hypot(positions.PS.x - positions.BS1.x, positions.PS.y - positions.BS1.y)
+                   + Math.hypot(positions.M2.x - positions.PS.x, positions.M2.y - positions.PS.y)
+                   + Math.hypot(positions.BS2.x - positions.M2.x, positions.BS2.y - positions.M2.y);
+  // Display arm lengths (arbitrary scaling for readout)
+  const armXphys = arm1LenPx * 0.0005;
+  const armYphys = arm2LenPx * 0.0005;
+
+  // OPD from PHYSICS (store mirror positions in meters — nm/pm scale precision)
+  const physArmX = Math.sqrt(mirror1PosX ** 2 + mirror1PosZ ** 2);
+  const physArmY = Math.sqrt(mirror2PosX ** 2 + mirror2PosZ ** 2);
+  const tipOPD = (mirror1Tip - mirror2Tip) * physArmX;
+  const defaultArm1Px = 580, defaultArm2Px = 580;
+  const dragOPD = (arm1LenPx - defaultArm1Px - (arm2LenPx - defaultArm2Px)) * 0.5e-6;
+  const baseOPD = 2 * (physArmX - physArmY);
+  const compensatorOPD = compensatorEnabled
+    ? (compensatorRefractiveIndex - 1) * compensatorThickness
+    : 0;
+  const opd = baseOPD + tipOPD + dragOPD - compensatorOPD;
 
   /**
    * Build a photon with SUPERPOSITION paths.
@@ -126,7 +158,7 @@ const SceneManager = () => {
       arm1Active: st.m1Enabled,
       arm2Active: st.m2Enabled,
       bs2Active: st.bs2Enabled,
-      speed: 0.3 + Math.random() * 0.1,
+      speed: 0.8 + Math.random() * 0.2,
       prevPos1: null, prevPos2: null, prevPosMain: null,
       ghost1Opacity: st.m1Enabled ? 1 : 0,
       ghost2Opacity: st.m2Enabled ? 1 : 0,
@@ -135,7 +167,36 @@ const SceneManager = () => {
   }, [positions, opd, INPUT, D1, D2]);
 
   const fireOne = useCallback(() => { simRef.current.photons.push(buildPhoton()); }, [buildPhoton]);
-  const fireN = useCallback((n) => { simRef.current.autoQ += n; }, []);
+
+  // Batch fire: resolve most counts INSTANTLY, animate only ~5 visible photons
+  const fireN = useCallback((n) => {
+    const st = useSimulationStore.getState();
+    const bothArms = st.m1Enabled && st.m2Enabled;
+    const { p1 } = detectionProbabilities(st.wavelength, opd);
+    const vis = fringeVisibility(opd, st.laserLinewidth);
+    const effectiveP1 = (bothArms && st.bs2Enabled) ? (p1 * vis + 0.5 * (1 - vis)) : 0.5;
+
+    // Instantly resolve bulk (n-5) photons statistically
+    const animateCount = Math.min(5, n);
+    const instantCount = n - animateCount;
+    if (instantCount > 0) {
+      let d1 = 0, d2 = 0;
+      for (let i = 0; i < instantCount; i++) {
+        if (Math.random() < effectiveP1) d1++; else d2++;
+      }
+      // Batch update store
+      const store = useSimulationStore.getState();
+      useSimulationStore.setState({
+        simD1: store.simD1 + d1,
+        simD2: store.simD2 + d2,
+        simFired: store.simFired + instantCount,
+      });
+    }
+    // Queue a few for animation
+    for (let i = 0; i < animateCount; i++) {
+      simRef.current.photons.push(buildPhoton());
+    }
+  }, [buildPhoton, opd]);
   const resetCounts = useCallback(() => {
     const sim = simRef.current;
     sim.photons = []; sim.flashes = []; sim.autoQ = 0; sim.continuous = false; sim.continuousTimer = 0;
@@ -360,7 +421,11 @@ const SceneManager = () => {
 
       // ── PHOTON ANIMATION ──
       if (!st.simulationPaused) {
-        if (sim.autoQ > 0 && sim.photons.length < 20) { sim.autoQ--; sim.photons.push(buildPhoton()); }
+        if (sim.autoQ > 0 && sim.photons.length < 15) {
+          const batch = Math.min(sim.autoQ, 3);
+          sim.autoQ -= batch;
+          for (let i = 0; i < batch; i++) sim.photons.push(buildPhoton());
+        }
         if (sim.continuous) {
           sim.continuousTimer += dt;
           if (sim.continuousTimer > 0.07) { sim.continuousTimer = 0; sim.photons.push(buildPhoton()); }
@@ -493,7 +558,8 @@ const SceneManager = () => {
 
     animFrame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animFrame);
-  }, [positions, buildPhoton, opd, armXphys, armYphys, INPUT, D1, D2]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positions, buildPhoton]);
 
   // ── Drag-and-drop ──
   const handleMouseDown = useCallback((e) => {

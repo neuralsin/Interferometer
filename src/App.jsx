@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import SceneManager from './scene/SceneManager.jsx';
 import Sidebar from './ui/Sidebar.jsx';
 import BottomBar from './ui/BottomBar.jsx';
@@ -36,7 +36,12 @@ const DetectionOverlay = ({ isResearch }) => {
   const state = useSimulationStore();
   const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
   const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
-  const opd = 2 * (armX - armY);
+  // OPD must match SceneManager: base + tip differential + compensator
+  const tipOPD = (state.mirror1Tip - state.mirror2Tip) * armX;
+  const compensatorOPD = state.compensatorEnabled
+    ? ((state.compensatorRefractiveIndex || 1.5168) - 1) * (state.compensatorThickness || 0.00635)
+    : 0;
+  const opd = 2 * (armX - armY) + tipOPD - compensatorOPD;
   const { p1, p2 } = detectionProbabilities(state.wavelength, opd);
   const vis = fringeVisibility(opd, state.laserLinewidth);
   // Read LIVE sim counts from SceneManager particle sim
@@ -210,7 +215,12 @@ const App = () => {
   const toggleResearchMode = useSimulationStore((s) => s.toggleResearchMode);
   const setParam = useSimulationStore((s) => s.setParam);
   const [activeTab, setActiveTab] = useState('sim');
+  const [darkMode, setDarkMode] = useState(true);
   const viewportRef = useRef(null);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+  }, [darkMode]);
 
   const handleFullscreen = useCallback(() => {
     const el = viewportRef.current;
@@ -282,6 +292,14 @@ const App = () => {
               : { background: '#fff', border: '1px solid #fff', color: '#000' }),
           }}>
             {isResearchMode ? 'Switch to Guided' : 'Switch to Research'}
+          </button>
+          <button onClick={() => setDarkMode(d => !d)} title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'} style={{
+            padding: '8px 12px', fontSize: 14, cursor: 'pointer', borderRadius: 'var(--radius-high)',
+            background: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+            border: `1px solid ${darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`,
+            color: darkMode ? '#fff' : '#111', transition: 'all 200ms', lineHeight: 1,
+          }}>
+            {darkMode ? '☀' : '☾'}
           </button>
         </div>
       </header>
