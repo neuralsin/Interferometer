@@ -4,20 +4,26 @@ import { generateFringePattern, wavelengthToColor, detectionProbabilities } from
 import { fringeVisibility } from '../physics/coherenceModel.js';
 
 /**
- * SceneManager — Animated 2D Michelson Interferometer
+ * SceneManager — Mach-Zehnder Interferometer (MZI)
  *
- * Features:
- * - Animated photon/particle dots traveling along beam paths
- * - Wave mode with oscillating sinusoidal paths
- * - Detection counters with flash effects
- * - All beam paths respond to store mirror positions
- * - Power affects beam brightness/intensity
- * - BS reflectivity affects split ratio
- * - Fire controls (Send 1, Send 50, continuous)
- * - Mini interferogram in detector
+ * Layout (matching reference diagram):
+ *         D1 (up)
+ *         ↑
+ * M1 ───→ BS2 ──→ D2 (right)
+ * ↑       ↑
+ * │       │
+ * BS1 →[PS]→ M2
+ * ↑
+ * INPUT
+ *
+ * Features: drag-and-drop components, animated photons, dual detectors,
+ * phase shifter, all params affect physics
  */
 
-/* ─── Path utilities ─── */
+const GRID = 20; // snap grid
+const snap = (v) => Math.round(v / GRID) * GRID;
+
+// Path utilities
 const pathLen = (pts) => {
   let l = 0;
   for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
@@ -40,78 +46,77 @@ const interpPt = (pts, t) => {
 const SceneManager = () => {
   const canvasRef = useRef(null);
   const simRef = useRef({
-    photons: [],
-    flashes: [],
-    d1: 0, d2: 0, fired: 0,
-    waveT: 0,
-    autoQ: 0,
-    continuous: false,
-    continuousTimer: 0,
+    photons: [], flashes: [],
+    waveT: 0, autoQ: 0, continuous: false, continuousTimer: 0,
   });
   const [, forceRender] = useState(0);
 
+  // Draggable component positions (in virtual 700x440 space)
+  const [positions, setPositions] = useState({
+    BS1: { x: 150, y: 310 },
+    M1:  { x: 150, y: 100 },
+    M2:  { x: 520, y: 310 },
+    BS2: { x: 520, y: 100 },
+    PS:  { x: 340, y: 310 },
+  });
+  const dragRef = useRef({ dragging: null, offsetX: 0, offsetY: 0 });
+
   const state = useSimulationStore();
 
-  // Layout coordinates (700×440 virtual space)
-  const getLayout = useCallback(() => {
-    const SRC = { x: 60, y: 220 };
-    const BS = { x: 220, y: 220 };
-    const m1x = 220 + (state.mirror1PosX / 0.175) * 180;
-    const m1y = 220 + (state.mirror1PosZ / 0.175) * 180;
-    const m2x = 220 + (state.mirror2PosX / 0.175) * 180;
-    const m2y = 220 + (state.mirror2PosZ / 0.175) * 180;
-    const M1 = { x: Math.max(280, Math.min(620, m1x)), y: Math.max(30, Math.min(410, m1y)) };
-    const M2 = { x: Math.max(30, Math.min(620, m2x)), y: Math.max(30, Math.min(410, m2y)) };
-    const DET = { x: 220, y: 400 };
-    return { SRC, BS, M1, M2, DET };
-  }, [state.mirror1PosX, state.mirror1PosZ, state.mirror2PosX, state.mirror2PosZ]);
+  // Derived positions for static endpoints
+  const INPUT = { x: 40, y: positions.BS1.y };
+  const D1 = { x: positions.BS2.x, y: 30 };
+  const D2 = { x: 660, y: positions.BS2.y };
 
-  // Build a photon/particle path
-  const buildPath = useCallback(() => {
-    const L = getLayout();
-    const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
-    const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
-    const opd = 2 * (armX - armY);
+  // Compute OPD from arm lengths
+  const arm1Len = Math.hypot(positions.M1.x - positions.BS1.x, positions.M1.y - positions.BS1.y)
+                + Math.hypot(positions.BS2.x - positions.M1.x, positions.BS2.y - positions.M1.y);
+  const arm2Len = Math.hypot(positions.PS.x - positions.BS1.x, positions.PS.y - positions.BS1.y)
+                + Math.hypot(positions.M2.x - positions.PS.x, positions.M2.y - positions.PS.y)
+                + Math.hypot(positions.BS2.x - positions.M2.x, positions.BS2.y - positions.M2.y);
+  // Scale virtual units to meters (1 virtual unit ≈ 0.5mm)
+  const scale = 0.0005;
+  const armXphys = arm1Len * scale;
+  const armYphys = arm2Len * scale;
+  const mirrorTipOPD = (state.mirror1Tip + state.mirror2Tip) * armXphys;
+  const compensatorOPD = state.compensatorEnabled ? 0 : (state.bsRefractiveIndex - 1) * state.bsThickness;
+  const opd = (armXphys - armYphys) + mirrorTipOPD + compensatorOPD;
+
+  // Build photon path through MZI
+  const buildPhoton = useCallback(() => {
+    const P = positions;
     const { p1 } = detectionProbabilities(state.wavelength, opd);
     const vis = fringeVisibility(opd, state.laserLinewidth);
-    const effectiveP1 = p1 * vis + 0.5 * (1 - vis); // decoherence → 50:50
+    const effectiveP1 = p1 * vis + 0.5 * (1 - vis);
     const goD1 = Math.random() < effectiveP1;
 
-    // Path: Source → BS → random arm → BS → Detector
+    // Choose arm at BS1 (cosmetic — both arms lead to BS2)
     const goUpper = Math.random() < state.bsReflectivity;
-    let solid;
+    let path;
     if (goUpper) {
-      solid = [L.SRC, L.BS, L.M2, L.BS, L.DET];
+      // Reflected up: BS1 → M1 → BS2
+      path = [INPUT, P.BS1, P.M1, P.BS2];
     } else {
-      solid = [L.SRC, L.BS, L.M1, L.BS, L.DET];
+      // Transmitted right: BS1 → PS → M2 → BS2
+      path = [INPUT, P.BS1, P.PS, P.M2, P.BS2];
     }
+    // After BS2: go to D1 or D2 based on interference
+    if (goD1) {
+      path.push(D1);
+    } else {
+      path.push(D2);
+    }
+    return { path, goD1, progress: 0, prevPos: null, speed: 0.25 + Math.random() * 0.12, arm: goUpper ? 1 : 2 };
+  }, [positions, state.wavelength, state.laserLinewidth, state.bsReflectivity, state.mirror1Tip, state.mirror2Tip, state.compensatorEnabled, opd, INPUT, D1, D2]);
 
-    return { solid, goD1, progress: 0, prevPos: null, speed: 0.3 + Math.random() * 0.15 };
-  }, [state, getLayout]);
-
-  // Fire one photon
-  const fireOne = useCallback(() => {
-    const sim = simRef.current;
-    sim.photons.push(buildPath());
-  }, [buildPath]);
-
-  // Fire N
-  const fireN = useCallback((n) => {
-    const sim = simRef.current;
-    sim.autoQ += n;
-  }, []);
-
-  // Reset
+  const fireOne = useCallback(() => { simRef.current.photons.push(buildPhoton()); }, [buildPhoton]);
+  const fireN = useCallback((n) => { simRef.current.autoQ += n; }, []);
   const resetCounts = useCallback(() => {
     const sim = simRef.current;
-    sim.d1 = 0; sim.d2 = 0; sim.fired = 0;
-    sim.photons = []; sim.flashes = [];
-    sim.autoQ = 0; sim.continuous = false;
+    sim.photons = []; sim.flashes = []; sim.autoQ = 0; sim.continuous = false; sim.continuousTimer = 0;
     useSimulationStore.getState().resetSimCounts();
     forceRender(r => r + 1);
   }, []);
-
-  // Toggle continuous
   const toggleContinuous = useCallback(() => {
     simRef.current.continuous = !simRef.current.continuous;
     forceRender(r => r + 1);
@@ -121,47 +126,38 @@ const SceneManager = () => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    let animFrame;
-    let lastTs = null;
+    let animFrame, lastTs = null;
 
     const animate = (ts) => {
       animFrame = requestAnimationFrame(animate);
       if (!lastTs) lastTs = ts;
-      const dt = (ts - lastTs) / 1000;
+      const dt = Math.min(0.05, (ts - lastTs) / 1000);
       lastTs = ts;
       const sim = simRef.current;
 
       const parent = canvas.parentElement;
       if (!parent) return;
       const dpr = window.devicePixelRatio || 1;
-      const W = parent.clientWidth;
-      const H = parent.clientHeight;
+      const W = parent.clientWidth, H = parent.clientHeight;
       if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
-        canvas.width = W * dpr;
-        canvas.height = H * dpr;
-        canvas.style.width = W + 'px';
-        canvas.style.height = H + 'px';
+        canvas.width = W * dpr; canvas.height = H * dpr;
+        canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
       }
       const ctx = canvas.getContext('2d');
       ctx.save();
       ctx.scale(dpr, dpr);
 
       const sf = Math.min(W / 700, H / 440);
-      const ox = (W - 700 * sf) / 2;
-      const oy = (H - 440 * sf) / 2;
+      const ox = (W - 700 * sf) / 2, oy = (H - 440 * sf) / 2;
       const px = (x) => ox + x * sf;
       const py = (y) => oy + y * sf;
       const ps = (s) => s * sf;
 
       const st = useSimulationStore.getState();
       const wlColor = wavelengthToColor(st.wavelength);
-      const L = getLayout();
-      const armX = Math.sqrt(st.mirror1PosX ** 2 + st.mirror1PosZ ** 2);
-      const armY = Math.sqrt(st.mirror2PosX ** 2 + st.mirror2PosZ ** 2);
-      const opd = 2 * (armX - armY);
-      const powerFactor = Math.min(1, st.laserPower / 0.01); // normalize to 10mW max
+      const powerFactor = Math.min(1, st.laserPower / 0.01);
+      const P = positions; // current positions
 
-      // ── Clear ──
       ctx.clearRect(0, 0, W, H);
 
       // Subtle grid
@@ -170,10 +166,10 @@ const SceneManager = () => {
       for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
       for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 
-      // ── Guide lines (dashed) ──
-      const drawGuide = (pts) => {
+      // ── Guide beam paths (dashed) ──
+      const drawGuide = (...pts) => {
         ctx.save();
-        ctx.setLineDash([ps(5), ps(8)]);
+        ctx.setLineDash([ps(4), ps(6)]);
         ctx.strokeStyle = 'rgba(255,255,255,0.07)';
         ctx.lineWidth = ps(0.8);
         ctx.beginPath();
@@ -181,304 +177,217 @@ const SceneManager = () => {
         ctx.stroke();
         ctx.restore();
       };
-      drawGuide([L.SRC, L.BS]);
-      drawGuide([L.BS, L.M1]);
-      drawGuide([L.BS, L.M2]);
-      drawGuide([L.BS, L.DET]);
+      // Arm 1: BS1 → M1 → BS2
+      drawGuide(INPUT, P.BS1, P.M1, P.BS2, D1);
+      // Arm 2: BS1 → PS → M2 → BS2
+      drawGuide(P.BS1, P.PS, P.M2, P.BS2, D2);
 
-      // ── Beam paths (continuous glow, intensity = power) ──
+      // ── Solid beam paths (glow) ──
       const drawBeamPath = (from, to, alpha) => {
         const a = alpha * powerFactor;
         if (a < 0.01) return;
         ctx.save();
         ctx.strokeStyle = wlColor;
-        ctx.globalAlpha = a * 0.4;
+        ctx.globalAlpha = a * 0.35;
         ctx.lineWidth = ps(2);
         ctx.shadowColor = wlColor;
-        ctx.shadowBlur = ps(6) * powerFactor;
+        ctx.shadowBlur = ps(5) * powerFactor;
         ctx.beginPath();
-        ctx.moveTo(px(from.x), py(from.y));
-        ctx.lineTo(px(to.x), py(to.y));
+        ctx.moveTo(px(from.x), py(from.y)); ctx.lineTo(px(to.x), py(to.y));
         ctx.stroke();
         ctx.restore();
       };
-      drawBeamPath(L.SRC, L.BS, 1.0);
-      drawBeamPath(L.BS, L.M1, st.bsTransmissivity);
-      drawBeamPath(L.BS, L.M2, st.bsReflectivity);
-      drawBeamPath(L.BS, L.DET, 0.7);
+      drawBeamPath(INPUT, P.BS1, 1.0);
+      drawBeamPath(P.BS1, P.M1, st.bsReflectivity);
+      drawBeamPath(P.M1, P.BS2, st.bsReflectivity * st.mirror1Reflectivity);
+      drawBeamPath(P.BS1, P.PS, st.bsTransmissivity);
+      drawBeamPath(P.PS, P.M2, st.bsTransmissivity);
+      drawBeamPath(P.M2, P.BS2, st.bsTransmissivity * st.mirror2Reflectivity);
+      drawBeamPath(P.BS2, D1, 0.5);
+      drawBeamPath(P.BS2, D2, 0.5);
 
-      // ── Wave mode: oscillating sinusoidal wave along paths ──
-      sim.waveT += dt;
-      if (!st.simulationPaused) {
-        const drawWave = (pts, phaseOff = 0, alpha = 0.6) => {
-          const total = pathLen(pts);
-          const nPts = Math.round(total * 2);
-          ctx.save();
-          ctx.strokeStyle = wlColor;
-          ctx.globalAlpha = alpha * powerFactor;
-          ctx.lineWidth = ps(1.5);
-          ctx.beginPath();
-          let first = true;
-          for (let i = 0; i <= nPts; i++) {
-            const frac = i / nPts;
-            const pos = interpPt(pts, frac);
-            const dx = i < nPts ? (interpPt(pts, (i + 1) / nPts).x - pos.x) : 0;
-            const dy = i < nPts ? (interpPt(pts, (i + 1) / nPts).y - pos.y) : 0;
-            const len = Math.hypot(dx, dy) || 1;
-            const nx = -dy / len, ny = dx / len;
-            const wave = Math.sin(frac * total * 0.15 - sim.waveT * 4 + phaseOff) * ps(4) * powerFactor;
-            const wx = px(pos.x) + nx * wave;
-            const wy = px(pos.y) + ny * wave;  // intentionally use px for uniform scaling
-            if (first) { ctx.moveTo(wx, py(pos.y) + (ny * wave)); first = false; }
-            else ctx.lineTo(px(pos.x) + nx * wave, py(pos.y) + ny * wave);
-          }
-          ctx.stroke();
-          ctx.restore();
-        };
-        // Only draw waves along beam paths (subtle, showing standing wave)
-        drawWave([L.SRC, L.BS], 0, 0.3);
-        drawWave([L.BS, L.M1], 0, 0.2 * st.bsTransmissivity);
-        drawWave([L.BS, L.M2], Math.PI / 2, 0.2 * st.bsReflectivity);
-      }
-
-      // ── Source ──
-      const srcR = ps(16);
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
-      ctx.strokeStyle = wlColor;
-      ctx.lineWidth = ps(1.5);
-      ctx.beginPath(); ctx.arc(px(L.SRC.x), py(L.SRC.y), srcR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      // Pulsing inner dot
-      const pulse = 0.6 + 0.4 * Math.sin(sim.waveT * 3);
-      ctx.fillStyle = wlColor;
-      ctx.globalAlpha = pulse * powerFactor;
-      ctx.beginPath(); ctx.arc(px(L.SRC.x), py(L.SRC.y), ps(5), 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
-      // Label
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.font = `500 ${ps(10)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('SOURCE', px(L.SRC.x), py(L.SRC.y) + srcR + ps(12));
-      ctx.font = `${ps(8)}px monospace`;
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.fillText(`${(st.wavelength * 1e9).toFixed(0)}nm · ${(st.laserPower * 1e3).toFixed(1)}mW`, px(L.SRC.x), py(L.SRC.y) + srcR + ps(22));
-
-      // ── Beam Splitter ──
-      const bsR = ps(18);
-      ctx.save();
-      ctx.translate(px(L.BS.x), py(L.BS.y));
-      ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = 'rgba(255,255,255,0.05)';
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-      ctx.lineWidth = ps(1.2);
-      ctx.beginPath(); ctx.rect(-bsR, -bsR, bsR * 2, bsR * 2); ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.lineWidth = ps(2);
-      ctx.beginPath(); ctx.moveTo(-bsR * 0.7, bsR * 0.7); ctx.lineTo(bsR * 0.7, -bsR * 0.7); ctx.stroke();
-      ctx.restore();
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.font = `600 ${ps(11)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText(`BS₁`, px(L.BS.x), py(L.BS.y) - bsR - ps(6));
-      ctx.font = `${ps(8)}px monospace`;
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.fillText(`${(st.bsReflectivity * 100).toFixed(0)}:${(st.bsTransmissivity * 100).toFixed(0)}`, px(L.BS.x), py(L.BS.y) - bsR - ps(16));
-
-      // ── Mirrors ──
-      const drawMirror = (pos, label, armLen) => {
-        const r = ps(14);
+      // ── Draw components ──
+      const drawBS = (pos, label) => {
+        const r = ps(16);
         ctx.save();
         ctx.translate(px(pos.x), py(pos.y));
         ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = 'rgba(100,140,220,0.08)';
+        ctx.strokeStyle = 'rgba(100,140,220,0.35)';
+        ctx.lineWidth = ps(1.2);
+        ctx.beginPath(); ctx.rect(-r, -r, r * 2, r * 2); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = 'rgba(100,140,220,0.7)';
+        ctx.lineWidth = ps(2);
+        ctx.beginPath(); ctx.moveTo(-r * 0.7, r * 0.7); ctx.lineTo(r * 0.7, -r * 0.7); ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.font = `600 ${ps(10)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(label, px(pos.x), py(pos.y) - r - ps(6));
+      };
+
+      const drawMirror = (pos, label, armLen, tipVal) => {
+        const r = ps(13);
+        ctx.save();
+        ctx.translate(px(pos.x), py(pos.y));
+        // Tilt mirror based on tip angle (visual only, scaled up for visibility)
+        const tiltAngle = Math.PI / 4 + tipVal * 200;
+        ctx.rotate(tiltAngle);
         ctx.fillStyle = 'rgba(255,255,255,0.06)';
         ctx.strokeStyle = 'rgba(255,255,255,0.25)';
         ctx.lineWidth = ps(1.2);
         ctx.beginPath(); ctx.rect(-r, -r, r * 2, r * 2); ctx.fill(); ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
         ctx.lineWidth = ps(2.5);
         ctx.beginPath(); ctx.moveTo(-r * 0.65, r * 0.65); ctx.lineTo(r * 0.65, -r * 0.65); ctx.stroke();
         ctx.restore();
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.font = `600 ${ps(11)}px sans-serif`;
+        ctx.font = `600 ${ps(10)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.fillText(label, px(pos.x), py(pos.y) - r - ps(6));
         ctx.font = `${ps(8)}px monospace`;
         ctx.fillStyle = 'rgba(255,255,255,0.3)';
         ctx.fillText(`${(armLen * 1e3).toFixed(1)}mm`, px(pos.x), py(pos.y) - r - ps(16));
-      };
-      drawMirror(L.M1, 'M₁', armX);
-      drawMirror(L.M2, 'M₂', armY);
-
-      // ── Compensator plate ──
-      if (st.compensatorEnabled) {
-        const cpX = (L.BS.x + L.M1.x) / 2;
-        const cpY = (L.BS.y + L.M1.y) / 2;
-        ctx.fillStyle = 'rgba(167,139,250,0.12)';
-        ctx.strokeStyle = 'rgba(167,139,250,0.5)';
-        ctx.lineWidth = ps(0.8);
-        const cpW = ps(36), cpH = ps(16);
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(px(cpX) - cpW / 2, py(cpY) - cpH / 2, cpW, cpH, ps(3));
-        else { ctx.rect(px(cpX) - cpW / 2, py(cpY) - cpH / 2, cpW, cpH); }
-        ctx.fill(); ctx.stroke();
-        ctx.fillStyle = 'rgba(167,139,250,0.9)';
-        ctx.font = `500 ${ps(8)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText('COMP', px(cpX), py(cpY) + ps(3));
-      }
-
-      // ── Detector with mini interferogram ──
-      const detW = ps(48), detH = ps(36);
-      const fringeRes = 24;
-      const fringeData = generateFringePattern({
-        wavelength: st.wavelength, opdCenter: opd,
-        tiltX: st.mirror1Tip, tiltY: st.mirror2Tip,
-        resolution: fringeRes, detectorSize: 0.01,
-        linewidth: st.laserLinewidth,
-      });
-      // Detector flash glow
-      const activeFlash = sim.flashes.some(f => f.age < 10);
-      if (activeFlash) {
-        const g = ctx.createRadialGradient(px(L.DET.x), py(L.DET.y), 0, px(L.DET.x), py(L.DET.y), ps(40));
-        g.addColorStop(0, 'rgba(45,212,168,0.4)');
-        g.addColorStop(1, 'transparent');
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(px(L.DET.x), py(L.DET.y), ps(40), 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.fillStyle = activeFlash ? 'rgba(45,212,168,0.1)' : 'rgba(255,255,255,0.04)';
-      ctx.strokeStyle = '#2dd4a8';
-      ctx.lineWidth = ps(activeFlash ? 2 : 1.2);
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(px(L.DET.x) - detW / 2, py(L.DET.y) - detH / 2, detW, detH, ps(5));
-      else ctx.rect(px(L.DET.x) - detW / 2, py(L.DET.y) - detH / 2, detW, detH);
-      ctx.fill(); ctx.stroke();
-      // Mini fringe pattern
-      const fR = ps(12);
-      const cr = parseInt(wlColor.slice(1, 3), 16);
-      const cg = parseInt(wlColor.slice(3, 5), 16);
-      const cb = parseInt(wlColor.slice(5, 7), 16);
-      for (let j = 0; j < fringeRes; j++) {
-        for (let i = 0; i < fringeRes; i++) {
-          const val = fringeData[j * fringeRes + i] * powerFactor;
-          const fx = px(L.DET.x) + (i / fringeRes - 0.5) * fR * 2;
-          const fy = py(L.DET.y) + (j / fringeRes - 0.5) * fR * 2;
-          const ddx = fx - px(L.DET.x), ddy = fy - py(L.DET.y);
-          if (ddx * ddx + ddy * ddy > fR * fR) continue;
-          ctx.fillStyle = `rgba(${Math.round(cr * val)},${Math.round(cg * val)},${Math.round(cb * val)},${0.4 + val * 0.6})`;
-          ctx.fillRect(fx, fy, fR * 2 / fringeRes + 0.5, fR * 2 / fringeRes + 0.5);
+        if (tipVal !== 0) {
+          ctx.fillText(`tip: ${(tipVal * 1e3).toFixed(2)}mrad`, px(pos.x), py(pos.y) + r + ps(14));
         }
-      }
-      ctx.fillStyle = '#2dd4a8';
-      ctx.font = `600 ${ps(10)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('DETECTOR', px(L.DET.x), py(L.DET.y) + detH / 2 + ps(12));
+      };
+
+      const drawDetector = (pos, label, count, isFlashing) => {
+        const w = ps(44), h = ps(32);
+        if (isFlashing) {
+          const g = ctx.createRadialGradient(px(pos.x), py(pos.y), 0, px(pos.x), py(pos.y), ps(35));
+          g.addColorStop(0, label === 'D1' ? 'rgba(45,212,168,0.35)' : 'rgba(79,156,249,0.35)');
+          g.addColorStop(1, 'transparent');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(px(pos.x), py(pos.y), ps(35), 0, Math.PI * 2); ctx.fill();
+        }
+        const color = label === 'D1' ? '#2dd4a8' : '#4f9cf9';
+        ctx.fillStyle = isFlashing ? `${color}22` : 'rgba(255,255,255,0.04)';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = ps(isFlashing ? 2 : 1.2);
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(px(pos.x) - w / 2, py(pos.y) - h / 2, w, h, ps(5));
+        else ctx.rect(px(pos.x) - w / 2, py(pos.y) - h / 2, w, h);
+        ctx.fill(); ctx.stroke();
+        // Dot indicator
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(px(pos.x), py(pos.y) - ps(4), ps(4), 0, Math.PI * 2); ctx.fill();
+        // Labels
+        ctx.fillStyle = color;
+        ctx.font = `700 ${ps(10)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(label, px(pos.x), py(pos.y) + ps(10));
+        ctx.font = `${ps(8)}px monospace`;
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillText(`${count}`, px(pos.x), py(pos.y) + h / 2 + ps(12));
+      };
+
+      // Source
+      const srcR = ps(14);
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.strokeStyle = wlColor;
+      ctx.lineWidth = ps(1.5);
+      ctx.beginPath(); ctx.arc(px(INPUT.x), py(INPUT.y), srcR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      sim.waveT += dt;
+      const pulse = 0.6 + 0.4 * Math.sin(sim.waveT * 3);
+      ctx.fillStyle = wlColor; ctx.globalAlpha = pulse * powerFactor;
+      ctx.beginPath(); ctx.arc(px(INPUT.x), py(INPUT.y), ps(4), 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = `500 ${ps(9)}px sans-serif`; ctx.textAlign = 'center';
+      ctx.fillText('INPUT', px(INPUT.x), py(INPUT.y) + srcR + ps(12));
+      ctx.font = `${ps(7)}px monospace`; ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillText(`${(st.wavelength * 1e9).toFixed(0)}nm`, px(INPUT.x), py(INPUT.y) + srcR + ps(21));
+
+      // Beam splitters
+      drawBS(P.BS1, 'BS₁');
+      drawBS(P.BS2, 'BS₂');
+
+      // Phase Shifter
+      const psW = ps(30), psH = ps(20);
+      ctx.fillStyle = 'rgba(167,139,250,0.1)';
+      ctx.strokeStyle = 'rgba(167,139,250,0.45)';
+      ctx.lineWidth = ps(0.8);
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(px(P.PS.x) - psW / 2, py(P.PS.y) - psH / 2, psW, psH, ps(3));
+      else ctx.rect(px(P.PS.x) - psW / 2, py(P.PS.y) - psH / 2, psW, psH);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(167,139,250,0.85)'; ctx.font = `500 ${ps(8)}px sans-serif`; ctx.textAlign = 'center';
+      ctx.fillText('PS', px(P.PS.x), py(P.PS.y) + ps(3));
+      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = `${ps(7)}px monospace`;
+      ctx.fillText(`Δφ`, px(P.PS.x), py(P.PS.y) + psH / 2 + ps(10));
+
+      // Mirrors (with tip visualization)
+      drawMirror(P.M1, 'M₁', armXphys, st.mirror1Tip);
+      drawMirror(P.M2, 'M₂', armYphys, st.mirror2Tip);
+
+      // Detectors
+      const d1Count = st.simD1, d2Count = st.simD2;
+      const d1Flash = sim.flashes.some(f => f.d1 && f.age < 10);
+      const d2Flash = sim.flashes.some(f => !f.d1 && f.age < 10);
+      drawDetector(D1, 'D1', d1Count, d1Flash);
+      drawDetector(D2, 'D2', d2Count, d2Flash);
+
+      // ── Arm labels ──
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = `${ps(9)}px sans-serif`; ctx.textAlign = 'center';
+      ctx.fillText('arm 1 (reflected)', px((P.BS1.x + P.M1.x) / 2) - ps(30), py((P.BS1.y + P.M1.y) / 2));
+      ctx.fillText('arm 2 (transmitted)', px((P.BS1.x + P.M2.x) / 2), py(P.BS1.y) + ps(16));
 
       // ── Animate photons ──
       if (!st.simulationPaused) {
-        // Auto-fire queue
-        if (sim.autoQ > 0 && sim.photons.length < 15) {
-          sim.autoQ--;
-          sim.photons.push(buildPath());
-        }
-        // Continuous mode
+        if (sim.autoQ > 0 && sim.photons.length < 20) { sim.autoQ--; sim.photons.push(buildPhoton()); }
         if (sim.continuous) {
           sim.continuousTimer += dt;
-          if (sim.continuousTimer > 0.08) {
-            sim.continuousTimer = 0;
-            sim.photons.push(buildPath());
-          }
+          if (sim.continuousTimer > 0.06) { sim.continuousTimer = 0; sim.photons.push(buildPhoton()); }
         }
 
         sim.photons = sim.photons.filter(ph => {
           ph.progress += dt * ph.speed;
           if (ph.progress >= 1) {
-            if (ph.goD1) sim.d1++; else sim.d2++;
-            sim.fired++;
-            // Push to store so DetectionOverlay updates
             useSimulationStore.getState().incSimCount(ph.goD1 ? 1 : 2);
             sim.flashes.push({ age: 0, d1: ph.goD1 });
             return false;
           }
-          // Draw photon dot
-          const pos = interpPt(ph.solid, ph.progress);
+          const pos = interpPt(ph.path, ph.progress);
           // Glow
-          const g = ctx.createRadialGradient(px(pos.x), py(pos.y), 0, px(pos.x), py(pos.y), ps(12));
-          g.addColorStop(0, wlColor + 'cc');
-          g.addColorStop(1, wlColor + '00');
+          const g = ctx.createRadialGradient(px(pos.x), py(pos.y), 0, px(pos.x), py(pos.y), ps(10));
+          g.addColorStop(0, wlColor + 'cc'); g.addColorStop(1, wlColor + '00');
           ctx.fillStyle = g;
-          ctx.beginPath(); ctx.arc(px(pos.x), py(pos.y), ps(12), 0, Math.PI * 2); ctx.fill();
-          // Trail
+          ctx.beginPath(); ctx.arc(px(pos.x), py(pos.y), ps(10), 0, Math.PI * 2); ctx.fill();
           if (ph.prevPos) {
             ctx.beginPath();
-            ctx.moveTo(px(ph.prevPos.x), py(ph.prevPos.y));
-            ctx.lineTo(px(pos.x), py(pos.y));
-            ctx.strokeStyle = wlColor + '88';
-            ctx.lineWidth = ps(2);
-            ctx.stroke();
+            ctx.moveTo(px(ph.prevPos.x), py(ph.prevPos.y)); ctx.lineTo(px(pos.x), py(pos.y));
+            ctx.strokeStyle = wlColor + '66'; ctx.lineWidth = ps(1.5); ctx.stroke();
           }
-          // Core dot
-          ctx.beginPath(); ctx.arc(px(pos.x), py(pos.y), ps(3.5), 0, Math.PI * 2);
-          ctx.fillStyle = '#fff';
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(px(pos.x), py(pos.y), ps(3), 0, Math.PI * 2);
+          ctx.fillStyle = '#fff'; ctx.fill();
           ph.prevPos = { ...pos };
           return true;
         });
 
-        // Flash effects
-        sim.flashes = sim.flashes.filter(f => {
-          f.age++;
-          if (f.age > 20) return false;
-          const a = 1 - f.age / 20;
-          ctx.save();
-          ctx.globalAlpha = a * 0.6;
-          ctx.beginPath();
-          ctx.arc(px(L.DET.x), py(L.DET.y), ps(18 + f.age * 1.2), 0, Math.PI * 2);
-          ctx.strokeStyle = '#2dd4a8';
-          ctx.lineWidth = ps(1.5);
-          ctx.stroke();
-          ctx.restore();
-          return true;
-        });
+        sim.flashes = sim.flashes.filter(f => { f.age++; return f.age < 20; });
       }
 
-      // ── Bottom readout bar ──
+      // ── Bottom readout ──
       const vis = fringeVisibility(opd, st.laserLinewidth);
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.font = `${ps(9)}px monospace`;
-      ctx.textAlign = 'left';
-      const ry = py(432);
-      ctx.fillText(`OPD: ${Math.abs(opd) < 1e-6 ? `${(opd * 1e9).toFixed(1)}nm` : `${(opd * 1e6).toFixed(3)}μm`}`, px(20), ry);
-      ctx.fillText(`V: ${(vis * 100).toFixed(1)}%`, px(180), ry);
-      ctx.fillText(`Δν: ${(st.laserLinewidth / 1e9).toFixed(2)}GHz`, px(280), ry);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = `${ps(9)}px monospace`; ctx.textAlign = 'left';
+      const ry = py(435);
+      ctx.fillText(`OPD: ${Math.abs(opd) < 1e-6 ? `${(opd * 1e9).toFixed(1)}nm` : `${(opd * 1e6).toFixed(2)}μm`}`, px(20), ry);
+      ctx.fillText(`V: ${(vis * 100).toFixed(1)}%`, px(170), ry);
+      ctx.fillText(`Arm1: ${(armXphys * 1e3).toFixed(1)}mm  Arm2: ${(armYphys * 1e3).toFixed(1)}mm`, px(290), ry);
 
-      // ── Detection stats (right side) ──
-      const total = sim.d1 + sim.d2;
-      const p1Pct = total > 0 ? (sim.d1 / total * 100).toFixed(1) : '—';
-      const p2Pct = total > 0 ? (sim.d2 / total * 100).toFixed(1) : '—';
-      ctx.textAlign = 'right';
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.font = `500 ${ps(10)}px sans-serif`;
-      ctx.fillText(`Sent: ${sim.fired}`, px(680), py(30));
-      ctx.fillStyle = '#2dd4a8';
-      ctx.fillText(`D₁: ${sim.d1} (${p1Pct}%)`, px(680), py(48));
-      ctx.fillStyle = '#4f9cf9';
-      ctx.fillText(`D₂: ${sim.d2} (${p2Pct}%)`, px(680), py(66));
-      // Theory
+      // Detection stats (top-right)
+      const total = st.simFired;
+      ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = `500 ${ps(9)}px sans-serif`;
+      ctx.fillText(`Sent: ${total}`, px(680), py(20));
       const { p1: tp1, p2: tp2 } = detectionProbabilities(st.wavelength, opd);
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.font = `${ps(8)}px monospace`;
-      ctx.fillText(`theory: ${(tp1 * 100).toFixed(0)}%/${(tp2 * 100).toFixed(0)}%`, px(680), py(82));
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = `${ps(8)}px monospace`;
+      ctx.fillText(`P(D1)=${(tp1 * 100).toFixed(0)}% P(D2)=${(tp2 * 100).toFixed(0)}%`, px(680), py(35));
 
-      // Detection bars
-      if (total > 0) {
-        const barX = px(580), barY = py(92), barW = ps(96), barH = ps(6);
-        ctx.fillStyle = 'rgba(255,255,255,0.06)';
-        ctx.fillRect(barX, barY, barW, barH);
-        ctx.fillStyle = '#2dd4a8';
-        ctx.fillRect(barX, barY, barW * sim.d1 / total, barH);
-        ctx.fillStyle = 'rgba(255,255,255,0.06)';
-        ctx.fillRect(barX, barY + barH + ps(2), barW, barH);
-        ctx.fillStyle = '#4f9cf9';
-        ctx.fillRect(barX, barY + barH + ps(2), barW * sim.d2 / total, barH);
+      // Drag indicator
+      if (dragRef.current.dragging) {
+        ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = `${ps(8)}px sans-serif`; ctx.textAlign = 'center';
+        ctx.fillText('drag to reposition', px(350), py(435));
       }
 
       ctx.restore();
@@ -486,23 +395,71 @@ const SceneManager = () => {
 
     animFrame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animFrame);
-  }, [getLayout, buildPath]);
+  }, [positions, buildPhoton, opd, armXphys, armYphys, INPUT, D1, D2]);
+
+  // ── Drag-and-drop ──
+  const handleMouseDown = useCallback((e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = rect.width, H = rect.height;
+    const sf = Math.min(W / 700, H / 440);
+    const ox = (W - 700 * sf) / 2, oy = (H - 440 * sf) / 2;
+    const mx = (e.clientX - rect.left - ox) / sf;
+    const my = (e.clientY - rect.top - oy) / sf;
+
+    // Check if clicking near a draggable component
+    for (const [name, pos] of Object.entries(positions)) {
+      const dist = Math.hypot(mx - pos.x, my - pos.y);
+      if (dist < 25) {
+        dragRef.current = { dragging: name, offsetX: mx - pos.x, offsetY: my - pos.y };
+        return;
+      }
+    }
+  }, [positions]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!dragRef.current.dragging) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width, H = rect.height;
+    const sf = Math.min(W / 700, H / 440);
+    const ox = (W - 700 * sf) / 2, oy = (H - 440 * sf) / 2;
+    const mx = (e.clientX - rect.left - ox) / sf;
+    const my = (e.clientY - rect.top - oy) / sf;
+    const newX = snap(Math.max(30, Math.min(670, mx - dragRef.current.offsetX)));
+    const newY = snap(Math.max(30, Math.min(420, my - dragRef.current.offsetY)));
+    setPositions(prev => ({ ...prev, [dragRef.current.dragging]: { x: newX, y: newY } }));
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    dragRef.current.dragging = null;
+  }, []);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, display: 'block' }} />
-      {/* Fire controls overlay */}
-      <div style={{
-        position: 'absolute', bottom: 12, right: 12, zIndex: 10,
-        display: 'flex', gap: 6, alignItems: 'center',
-      }}>
+      <canvas ref={canvasRef}
+        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{ position: 'absolute', inset: 0, display: 'block', cursor: dragRef.current.dragging ? 'grabbing' : 'default' }} />
+      {/* Fire controls */}
+      <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 10, display: 'flex', gap: 5, alignItems: 'center' }}>
         <SimBtn label="Send 1" onClick={fireOne} />
-        <SimBtn label="Send 50" onClick={() => fireN(50)} />
-        <SimBtn label="Send 500" onClick={() => fireN(500)} />
-        <SimBtn label={simRef.current.continuous ? '■ Stop' : '▶ Auto'}
-          onClick={toggleContinuous}
-          active={simRef.current.continuous} />
+        <SimBtn label="×50" onClick={() => fireN(50)} />
+        <SimBtn label="×500" onClick={() => fireN(500)} />
+        <SimBtn label={simRef.current.continuous ? '■ Stop' : '▶ Auto'} onClick={toggleContinuous} active={simRef.current.continuous} />
         <SimBtn label="Reset" onClick={resetCounts} danger />
+      </div>
+      {/* Interferometer label + drag hint */}
+      <div style={{ position: 'absolute', top: 8, left: 10, pointerEvents: 'none' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 2 }}>
+          Mach-Zehnder Interferometer
+        </div>
+        <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.2)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>
+          Drag components to reposition • Snap-to-grid
+        </div>
       </div>
     </div>
   );
@@ -510,13 +467,11 @@ const SceneManager = () => {
 
 const SimBtn = ({ label, onClick, active, danger }) => (
   <button onClick={onClick} style={{
-    padding: '5px 12px', fontSize: 9, fontWeight: 600,
+    padding: '4px 10px', fontSize: 9, fontWeight: 600,
     background: active ? 'rgba(79,156,249,0.25)' : danger ? 'rgba(240,96,96,0.12)' : 'rgba(255,255,255,0.06)',
     border: `1px solid ${active ? 'rgba(79,156,249,0.5)' : danger ? 'rgba(240,96,96,0.3)' : 'rgba(255,255,255,0.12)'}`,
-    borderRadius: 5, cursor: 'pointer',
-    color: danger ? '#f06060' : '#fff',
-    fontFamily: 'inherit', letterSpacing: '0.03em',
-    transition: 'all 150ms',
+    borderRadius: 5, cursor: 'pointer', color: danger ? '#f06060' : '#fff',
+    fontFamily: 'inherit', letterSpacing: '0.03em', transition: 'all 150ms',
   }}>
     {label}
   </button>
