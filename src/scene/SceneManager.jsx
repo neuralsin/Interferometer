@@ -4,26 +4,21 @@ import { generateFringePattern, wavelengthToColor, detectionProbabilities } from
 import { fringeVisibility } from '../physics/coherenceModel.js';
 
 /**
- * SceneManager — Mach-Zehnder Interferometer (MZI)
+ * SceneManager — Mach-Zehnder Interferometer (MZI) with Superposition
  *
- * Layout (matching reference diagram):
- *         D1 (up)
- *         ↑
- * M1 ───→ BS2 ──→ D2 (right)
- * ↑       ↑
- * │       │
- * BS1 →[PS]→ M2
- * ↑
- * INPUT
+ * Photon travels INPUT→BS1 where it SPLITS into two ghost dots:
+ *   Ghost A: BS1→M1→BS2 (arm 1, reflected)
+ *   Ghost B: BS1→PS→M2→BS2 (arm 2, transmitted)
+ * At BS2 the ghosts recombine — interference decides D1 or D2.
+ * The "losing" ghost fades out (destructive interference).
  *
- * Features: drag-and-drop components, animated photons, dual detectors,
- * phase shifter, all params affect physics
+ * Toggle M1/M2 off → that arm is blocked → no interference → 50:50
+ * Toggle BS2 off → no recombination → photons go straight
  */
 
-const GRID = 20; // snap grid
+const GRID = 20;
 const snap = (v) => Math.round(v / GRID) * GRID;
 
-// Path utilities
 const pathLen = (pts) => {
   let l = 0;
   for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
@@ -51,7 +46,6 @@ const SceneManager = () => {
   });
   const [, forceRender] = useState(0);
 
-  // Draggable component positions (in virtual 700x440 space)
   const [positions, setPositions] = useState({
     BS1: { x: 150, y: 310 },
     M1:  { x: 150, y: 100 },
@@ -63,18 +57,16 @@ const SceneManager = () => {
 
   const state = useSimulationStore();
 
-  // Derived positions for static endpoints
   const INPUT = { x: 40, y: positions.BS1.y };
   const D1 = { x: positions.BS2.x, y: 30 };
   const D2 = { x: 660, y: positions.BS2.y };
 
-  // Compute OPD from arm lengths
+  // Arm lengths from geometry
   const arm1Len = Math.hypot(positions.M1.x - positions.BS1.x, positions.M1.y - positions.BS1.y)
                 + Math.hypot(positions.BS2.x - positions.M1.x, positions.BS2.y - positions.M1.y);
   const arm2Len = Math.hypot(positions.PS.x - positions.BS1.x, positions.PS.y - positions.BS1.y)
                 + Math.hypot(positions.M2.x - positions.PS.x, positions.M2.y - positions.PS.y)
                 + Math.hypot(positions.BS2.x - positions.M2.x, positions.BS2.y - positions.M2.y);
-  // Scale virtual units to meters (1 virtual unit ≈ 0.5mm)
   const scale = 0.0005;
   const armXphys = arm1Len * scale;
   const armYphys = arm2Len * scale;
@@ -82,32 +74,65 @@ const SceneManager = () => {
   const compensatorOPD = state.compensatorEnabled ? 0 : (state.bsRefractiveIndex - 1) * state.bsThickness;
   const opd = (armXphys - armYphys) + mirrorTipOPD + compensatorOPD;
 
-  // Build photon path through MZI
+  /**
+   * Build a photon with SUPERPOSITION paths.
+   * Each photon has two ghosts (arm1 and arm2) that travel simultaneously.
+   * After BS2, interference determines which detector fires.
+   */
   const buildPhoton = useCallback(() => {
     const P = positions;
-    const { p1 } = detectionProbabilities(state.wavelength, opd);
-    const vis = fringeVisibility(opd, state.laserLinewidth);
-    const effectiveP1 = p1 * vis + 0.5 * (1 - vis);
-    const goD1 = Math.random() < effectiveP1;
+    const st = useSimulationStore.getState();
 
-    // Choose arm at BS1 (cosmetic — both arms lead to BS2)
-    const goUpper = Math.random() < state.bsReflectivity;
-    let path;
-    if (goUpper) {
-      // Reflected up: BS1 → M1 → BS2
-      path = [INPUT, P.BS1, P.M1, P.BS2];
+    // Arm paths
+    const arm1Path = [INPUT, P.BS1, P.M1, P.BS2];
+    const arm2Path = [INPUT, P.BS1, P.PS, P.M2, P.BS2];
+
+    // Detection probabilities from interference
+    const bothArmsActive = st.m1Enabled && st.m2Enabled;
+    let goD1;
+    if (!st.bs2Enabled) {
+      // No BS2 → photon takes one arm randomly, goes straight to its detector
+      goD1 = Math.random() < 0.5;
+    } else if (bothArmsActive) {
+      // Full MZI interference
+      const { p1 } = detectionProbabilities(st.wavelength, opd);
+      const vis = fringeVisibility(opd, st.laserLinewidth);
+      const effectiveP1 = p1 * vis + 0.5 * (1 - vis);
+      goD1 = Math.random() < effectiveP1;
     } else {
-      // Transmitted right: BS1 → PS → M2 → BS2
-      path = [INPUT, P.BS1, P.PS, P.M2, P.BS2];
+      // Only one arm → no interference → 50:50
+      goD1 = Math.random() < 0.5;
     }
-    // After BS2: go to D1 or D2 based on interference
-    if (goD1) {
-      path.push(D1);
-    } else {
-      path.push(D2);
-    }
-    return { path, goD1, progress: 0, prevPos: null, speed: 0.25 + Math.random() * 0.12, arm: goUpper ? 1 : 2 };
-  }, [positions, state.wavelength, state.laserLinewidth, state.bsReflectivity, state.mirror1Tip, state.mirror2Tip, state.compensatorEnabled, opd, INPUT, D1, D2]);
+
+    // After BS2: exit paths
+    const exitD1 = [P.BS2, D1];
+    const exitD2 = [P.BS2, D2];
+
+    // Phase 1: INPUT → BS1 (shared entrance)
+    const entrancePath = [INPUT, P.BS1];
+    // Phase 2: both ghosts in arms (superposition) — BS1 to BS2
+    const ghost1Path = [P.BS1, P.M1, P.BS2];  // arm 1
+    const ghost2Path = [P.BS1, P.PS, P.M2, P.BS2]; // arm 2
+    // Phase 3: exit — BS2 to D1 or D2
+    const exitPath = goD1 ? exitD1 : exitD2;
+
+    return {
+      phase: 'entrance', // 'entrance' → 'superposition' → 'exit'
+      progress: 0,
+      entrancePath,
+      ghost1Path, ghost2Path,
+      exitPath,
+      goD1,
+      arm1Active: st.m1Enabled,
+      arm2Active: st.m2Enabled,
+      bs2Active: st.bs2Enabled,
+      speed: 0.3 + Math.random() * 0.1,
+      prevPos1: null, prevPos2: null, prevPosMain: null,
+      ghost1Opacity: st.m1Enabled ? 1 : 0,
+      ghost2Opacity: st.m2Enabled ? 1 : 0,
+      exitOpacity: 0,
+    };
+  }, [positions, opd, INPUT, D1, D2]);
 
   const fireOne = useCallback(() => { simRef.current.photons.push(buildPhoton()); }, [buildPhoton]);
   const fireN = useCallback((n) => { simRef.current.autoQ += n; }, []);
@@ -122,7 +147,7 @@ const SceneManager = () => {
     forceRender(r => r + 1);
   }, []);
 
-  // Animation loop
+  // ── Animation Loop ──
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -156,34 +181,32 @@ const SceneManager = () => {
       const st = useSimulationStore.getState();
       const wlColor = wavelengthToColor(st.wavelength);
       const powerFactor = Math.min(1, st.laserPower / 0.01);
-      const P = positions; // current positions
+      const P = positions;
 
       ctx.clearRect(0, 0, W, H);
 
       // Subtle grid
       ctx.strokeStyle = 'rgba(255,255,255,0.025)';
       ctx.lineWidth = 1;
-      for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-      for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+      for (let gx = 0; gx < W; gx += 40) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+      for (let gy = 0; gy < H; gy += 40) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
 
       // ── Guide beam paths (dashed) ──
-      const drawGuide = (...pts) => {
+      const drawGuide = (pts, alpha = 0.07) => {
         ctx.save();
         ctx.setLineDash([ps(4), ps(6)]);
-        ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
         ctx.lineWidth = ps(0.8);
         ctx.beginPath();
         pts.forEach((p, i) => i === 0 ? ctx.moveTo(px(p.x), py(p.y)) : ctx.lineTo(px(p.x), py(p.y)));
         ctx.stroke();
         ctx.restore();
       };
-      // Arm 1: BS1 → M1 → BS2
-      drawGuide(INPUT, P.BS1, P.M1, P.BS2, D1);
-      // Arm 2: BS1 → PS → M2 → BS2
-      drawGuide(P.BS1, P.PS, P.M2, P.BS2, D2);
+      drawGuide([INPUT, P.BS1, P.M1, P.BS2, D1], st.m1Enabled ? 0.07 : 0.03);
+      drawGuide([P.BS1, P.PS, P.M2, P.BS2, D2], st.m2Enabled ? 0.07 : 0.03);
 
-      // ── Solid beam paths (glow) ──
-      const drawBeamPath = (from, to, alpha) => {
+      // ── Solid beam paths ──
+      const drawBeam = (from, to, alpha) => {
         const a = alpha * powerFactor;
         if (a < 0.01) return;
         ctx.save();
@@ -197,59 +220,74 @@ const SceneManager = () => {
         ctx.stroke();
         ctx.restore();
       };
-      drawBeamPath(INPUT, P.BS1, 1.0);
-      drawBeamPath(P.BS1, P.M1, st.bsReflectivity);
-      drawBeamPath(P.M1, P.BS2, st.bsReflectivity * st.mirror1Reflectivity);
-      drawBeamPath(P.BS1, P.PS, st.bsTransmissivity);
-      drawBeamPath(P.PS, P.M2, st.bsTransmissivity);
-      drawBeamPath(P.M2, P.BS2, st.bsTransmissivity * st.mirror2Reflectivity);
-      drawBeamPath(P.BS2, D1, 0.5);
-      drawBeamPath(P.BS2, D2, 0.5);
+      drawBeam(INPUT, P.BS1, 1.0);
+      if (st.m1Enabled) {
+        drawBeam(P.BS1, P.M1, st.bsReflectivity);
+        drawBeam(P.M1, P.BS2, st.bsReflectivity * st.mirror1Reflectivity);
+      }
+      if (st.m2Enabled) {
+        drawBeam(P.BS1, P.PS, st.bsTransmissivity);
+        drawBeam(P.PS, P.M2, st.bsTransmissivity);
+        drawBeam(P.M2, P.BS2, st.bsTransmissivity * st.mirror2Reflectivity);
+      }
+      if (st.bs2Enabled) {
+        drawBeam(P.BS2, D1, 0.5);
+        drawBeam(P.BS2, D2, 0.5);
+      }
 
-      // ── Draw components ──
-      const drawBS = (pos, label) => {
+      // ── Draw BS ──
+      const drawBS = (pos, label, enabled) => {
         const r = ps(16);
         ctx.save();
         ctx.translate(px(pos.x), py(pos.y));
         ctx.rotate(Math.PI / 4);
-        ctx.fillStyle = 'rgba(100,140,220,0.08)';
-        ctx.strokeStyle = 'rgba(100,140,220,0.35)';
+        ctx.fillStyle = enabled ? 'rgba(100,140,220,0.08)' : 'rgba(255,60,60,0.05)';
+        ctx.strokeStyle = enabled ? 'rgba(100,140,220,0.35)' : 'rgba(255,60,60,0.15)';
         ctx.lineWidth = ps(1.2);
         ctx.beginPath(); ctx.rect(-r, -r, r * 2, r * 2); ctx.fill(); ctx.stroke();
-        ctx.strokeStyle = 'rgba(100,140,220,0.7)';
+        ctx.strokeStyle = enabled ? 'rgba(100,140,220,0.7)' : 'rgba(255,60,60,0.3)';
         ctx.lineWidth = ps(2);
         ctx.beginPath(); ctx.moveTo(-r * 0.7, r * 0.7); ctx.lineTo(r * 0.7, -r * 0.7); ctx.stroke();
         ctx.restore();
-        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.fillStyle = enabled ? 'rgba(255,255,255,0.65)' : 'rgba(255,80,80,0.4)';
         ctx.font = `600 ${ps(10)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.fillText(label, px(pos.x), py(pos.y) - r - ps(6));
+        if (!enabled) {
+          ctx.fillStyle = 'rgba(255,80,80,0.35)'; ctx.font = `${ps(7)}px sans-serif`;
+          ctx.fillText('OFF', px(pos.x), py(pos.y) + r + ps(10));
+        }
+        // Show R:T ratio
+        if (enabled) {
+          ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = `${ps(7)}px monospace`;
+          ctx.fillText(`${(st.bsReflectivity*100).toFixed(0)}:${(st.bsTransmissivity*100).toFixed(0)}`, px(pos.x), py(pos.y) + r + ps(10));
+        }
       };
 
-      const drawMirror = (pos, label, armLen, tipVal) => {
+      const drawMirror = (pos, label, armLen, tipVal, enabled) => {
         const r = ps(13);
         ctx.save();
         ctx.translate(px(pos.x), py(pos.y));
-        // Tilt mirror based on tip angle (visual only, scaled up for visibility)
         const tiltAngle = Math.PI / 4 + tipVal * 200;
         ctx.rotate(tiltAngle);
-        ctx.fillStyle = 'rgba(255,255,255,0.06)';
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.fillStyle = enabled ? 'rgba(255,255,255,0.06)' : 'rgba(255,60,60,0.04)';
+        ctx.strokeStyle = enabled ? 'rgba(255,255,255,0.25)' : 'rgba(255,60,60,0.12)';
         ctx.lineWidth = ps(1.2);
         ctx.beginPath(); ctx.rect(-r, -r, r * 2, r * 2); ctx.fill(); ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.strokeStyle = enabled ? 'rgba(255,255,255,0.75)' : 'rgba(255,60,60,0.25)';
         ctx.lineWidth = ps(2.5);
         ctx.beginPath(); ctx.moveTo(-r * 0.65, r * 0.65); ctx.lineTo(r * 0.65, -r * 0.65); ctx.stroke();
         ctx.restore();
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.fillStyle = enabled ? 'rgba(255,255,255,0.7)' : 'rgba(255,80,80,0.35)';
         ctx.font = `600 ${ps(10)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.fillText(label, px(pos.x), py(pos.y) - r - ps(6));
-        ctx.font = `${ps(8)}px monospace`;
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillText(`${(armLen * 1e3).toFixed(1)}mm`, px(pos.x), py(pos.y) - r - ps(16));
-        if (tipVal !== 0) {
-          ctx.fillText(`tip: ${(tipVal * 1e3).toFixed(2)}mrad`, px(pos.x), py(pos.y) + r + ps(14));
+        if (!enabled) {
+          ctx.fillStyle = 'rgba(255,80,80,0.35)'; ctx.font = `${ps(7)}px sans-serif`;
+          ctx.fillText('OFF', px(pos.x), py(pos.y) + r + ps(14));
+        } else {
+          ctx.font = `${ps(7)}px monospace`; ctx.fillStyle = 'rgba(255,255,255,0.3)';
+          if (tipVal !== 0) ctx.fillText(`tip: ${(tipVal * 1e3).toFixed(2)}mrad`, px(pos.x), py(pos.y) + r + ps(14));
         }
       };
 
@@ -270,24 +308,17 @@ const SceneManager = () => {
         if (ctx.roundRect) ctx.roundRect(px(pos.x) - w / 2, py(pos.y) - h / 2, w, h, ps(5));
         else ctx.rect(px(pos.x) - w / 2, py(pos.y) - h / 2, w, h);
         ctx.fill(); ctx.stroke();
-        // Dot indicator
         ctx.fillStyle = color;
         ctx.beginPath(); ctx.arc(px(pos.x), py(pos.y) - ps(4), ps(4), 0, Math.PI * 2); ctx.fill();
-        // Labels
-        ctx.fillStyle = color;
-        ctx.font = `700 ${ps(10)}px sans-serif`;
-        ctx.textAlign = 'center';
+        ctx.font = `700 ${ps(10)}px sans-serif`; ctx.textAlign = 'center';
         ctx.fillText(label, px(pos.x), py(pos.y) + ps(10));
-        ctx.font = `${ps(8)}px monospace`;
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = `${ps(8)}px monospace`; ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.fillText(`${count}`, px(pos.x), py(pos.y) + h / 2 + ps(12));
       };
 
       // Source
       const srcR = ps(14);
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
-      ctx.strokeStyle = wlColor;
-      ctx.lineWidth = ps(1.5);
+      ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.strokeStyle = wlColor; ctx.lineWidth = ps(1.5);
       ctx.beginPath(); ctx.arc(px(INPUT.x), py(INPUT.y), srcR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       sim.waveT += dt;
       const pulse = 0.6 + 0.4 * Math.sin(sim.waveT * 3);
@@ -297,71 +328,139 @@ const SceneManager = () => {
       ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = `500 ${ps(9)}px sans-serif`; ctx.textAlign = 'center';
       ctx.fillText('INPUT', px(INPUT.x), py(INPUT.y) + srcR + ps(12));
       ctx.font = `${ps(7)}px monospace`; ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillText(`${(st.wavelength * 1e9).toFixed(0)}nm`, px(INPUT.x), py(INPUT.y) + srcR + ps(21));
+      ctx.fillText(`${(st.wavelength * 1e9).toFixed(0)}nm · ${(st.laserPower * 1e3).toFixed(1)}mW`, px(INPUT.x), py(INPUT.y) + srcR + ps(21));
 
-      // Beam splitters
-      drawBS(P.BS1, 'BS₁');
-      drawBS(P.BS2, 'BS₂');
-
+      // Components
+      drawBS(P.BS1, 'BS₁', true);
+      drawBS(P.BS2, 'BS₂', st.bs2Enabled);
       // Phase Shifter
       const psW = ps(30), psH = ps(20);
-      ctx.fillStyle = 'rgba(167,139,250,0.1)';
-      ctx.strokeStyle = 'rgba(167,139,250,0.45)';
-      ctx.lineWidth = ps(0.8);
+      ctx.fillStyle = 'rgba(167,139,250,0.1)'; ctx.strokeStyle = 'rgba(167,139,250,0.45)'; ctx.lineWidth = ps(0.8);
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(px(P.PS.x) - psW / 2, py(P.PS.y) - psH / 2, psW, psH, ps(3));
       else ctx.rect(px(P.PS.x) - psW / 2, py(P.PS.y) - psH / 2, psW, psH);
       ctx.fill(); ctx.stroke();
       ctx.fillStyle = 'rgba(167,139,250,0.85)'; ctx.font = `500 ${ps(8)}px sans-serif`; ctx.textAlign = 'center';
       ctx.fillText('PS', px(P.PS.x), py(P.PS.y) + ps(3));
-      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = `${ps(7)}px monospace`;
-      ctx.fillText(`Δφ`, px(P.PS.x), py(P.PS.y) + psH / 2 + ps(10));
 
-      // Mirrors (with tip visualization)
-      drawMirror(P.M1, 'M₁', armXphys, st.mirror1Tip);
-      drawMirror(P.M2, 'M₂', armYphys, st.mirror2Tip);
+      // Mirrors
+      drawMirror(P.M1, 'M₁', armXphys, st.mirror1Tip, st.m1Enabled);
+      drawMirror(P.M2, 'M₂', armYphys, st.mirror2Tip, st.m2Enabled);
 
       // Detectors
-      const d1Count = st.simD1, d2Count = st.simD2;
       const d1Flash = sim.flashes.some(f => f.d1 && f.age < 10);
       const d2Flash = sim.flashes.some(f => !f.d1 && f.age < 10);
-      drawDetector(D1, 'D1', d1Count, d1Flash);
-      drawDetector(D2, 'D2', d2Count, d2Flash);
+      drawDetector(D1, 'D1', st.simD1, d1Flash);
+      drawDetector(D2, 'D2', st.simD2, d2Flash);
 
-      // ── Arm labels ──
-      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = `${ps(9)}px sans-serif`; ctx.textAlign = 'center';
+      // Arm labels
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = `${ps(8)}px sans-serif`; ctx.textAlign = 'center';
       ctx.fillText('arm 1 (reflected)', px((P.BS1.x + P.M1.x) / 2) - ps(30), py((P.BS1.y + P.M1.y) / 2));
       ctx.fillText('arm 2 (transmitted)', px((P.BS1.x + P.M2.x) / 2), py(P.BS1.y) + ps(16));
 
-      // ── Animate photons ──
+      // ── PHOTON ANIMATION ──
       if (!st.simulationPaused) {
         if (sim.autoQ > 0 && sim.photons.length < 20) { sim.autoQ--; sim.photons.push(buildPhoton()); }
         if (sim.continuous) {
           sim.continuousTimer += dt;
-          if (sim.continuousTimer > 0.06) { sim.continuousTimer = 0; sim.photons.push(buildPhoton()); }
+          if (sim.continuousTimer > 0.07) { sim.continuousTimer = 0; sim.photons.push(buildPhoton()); }
         }
+
+        const drawDot = (posXY, opacity, color, radius) => {
+          if (opacity < 0.02) return;
+          ctx.save(); ctx.globalAlpha = opacity;
+          const g = ctx.createRadialGradient(px(posXY.x), py(posXY.y), 0, px(posXY.x), py(posXY.y), ps(radius));
+          g.addColorStop(0, color + 'cc'); g.addColorStop(1, color + '00');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(px(posXY.x), py(posXY.y), ps(radius), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.globalAlpha = opacity * 0.8;
+          ctx.beginPath(); ctx.arc(px(posXY.x), py(posXY.y), ps(3), 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        };
 
         sim.photons = sim.photons.filter(ph => {
           ph.progress += dt * ph.speed;
-          if (ph.progress >= 1) {
-            useSimulationStore.getState().incSimCount(ph.goD1 ? 1 : 2);
-            sim.flashes.push({ age: 0, d1: ph.goD1 });
-            return false;
+
+          if (ph.phase === 'entrance') {
+            // Phase 1: single dot INPUT → BS1
+            if (ph.progress >= 1) {
+              ph.phase = 'superposition';
+              ph.progress = 0;
+              return true;
+            }
+            const pos = interpPt(ph.entrancePath, ph.progress);
+            drawDot(pos, 1, wlColor, 10);
+          } else if (ph.phase === 'superposition') {
+            // Phase 2: TWO ghost dots traveling both arms simultaneously
+            if (ph.progress >= 1) {
+              if (ph.bs2Active) {
+                ph.phase = 'exit';
+                ph.progress = 0;
+                return true;
+              } else {
+                // No BS2 — photon exits at BS2 position randomly
+                useSimulationStore.getState().incSimCount(ph.goD1 ? 1 : 2);
+                sim.flashes.push({ age: 0, d1: ph.goD1 });
+                return false;
+              }
+            }
+            const pos1 = interpPt(ph.ghost1Path, ph.progress);
+            const pos2 = interpPt(ph.ghost2Path, ph.progress);
+
+            // Draw ghost trails (fainter)
+            if (ph.prevPos1 && ph.arm1Active) {
+              ctx.beginPath(); ctx.moveTo(px(ph.prevPos1.x), py(ph.prevPos1.y)); ctx.lineTo(px(pos1.x), py(pos1.y));
+              ctx.strokeStyle = wlColor + '44'; ctx.lineWidth = ps(1.2); ctx.stroke();
+            }
+            if (ph.prevPos2 && ph.arm2Active) {
+              ctx.beginPath(); ctx.moveTo(px(ph.prevPos2.x), py(ph.prevPos2.y)); ctx.lineTo(px(pos2.x), py(pos2.y));
+              ctx.strokeStyle = wlColor + '44'; ctx.lineWidth = ps(1.2); ctx.stroke();
+            }
+
+            // Ghost dots
+            if (ph.arm1Active) drawDot(pos1, ph.ghost1Opacity * 0.7, wlColor, 8);
+            if (ph.arm2Active) drawDot(pos2, ph.ghost2Opacity * 0.7, wlColor, 8);
+
+            // "Superposition" label at midpoint
+            if (ph.progress > 0.3 && ph.progress < 0.7 && ph.arm1Active && ph.arm2Active) {
+              ctx.save();
+              ctx.fillStyle = 'rgba(167,139,250,0.35)';
+              ctx.font = `${ps(7)}px sans-serif`;
+              ctx.textAlign = 'center';
+              const mid = { x: (P.BS1.x + P.BS2.x) / 2, y: (P.BS1.y + P.BS2.y) / 2 };
+              ctx.fillText('|ψ⟩ = |arm1⟩ + |arm2⟩', px(mid.x), py(mid.y));
+              ctx.restore();
+            }
+
+            ph.prevPos1 = { ...pos1 };
+            ph.prevPos2 = { ...pos2 };
+          } else if (ph.phase === 'exit') {
+            // Phase 3: single dot BS2 → D1 or D2
+            // The "winning" ghost exits, the "losing" one fades
+            if (ph.progress >= 1) {
+              useSimulationStore.getState().incSimCount(ph.goD1 ? 1 : 2);
+              sim.flashes.push({ age: 0, d1: ph.goD1 });
+              return false;
+            }
+            const pos = interpPt(ph.exitPath, ph.progress);
+            drawDot(pos, 1, ph.goD1 ? '#2dd4a8' : '#4f9cf9', 10);
+
+            // Show fading "destructive" dot going to the OTHER detector
+            if (ph.progress < 0.4) {
+              const fadePath = ph.goD1 ? [P.BS2, D2] : [P.BS2, D1];
+              const fadePos = interpPt(fadePath, ph.progress * 0.5);
+              const fadeAlpha = Math.max(0, 0.5 - ph.progress * 1.5);
+              if (fadeAlpha > 0.02) {
+                drawDot(fadePos, fadeAlpha, 'rgba(255,100,100)', 6);
+                // "Destructive interference" label
+                if (ph.progress < 0.2) {
+                  ctx.save(); ctx.fillStyle = `rgba(255,100,100,${fadeAlpha * 0.7})`; ctx.font = `${ps(7)}px sans-serif`; ctx.textAlign = 'center';
+                  ctx.fillText('destructive', px(fadePos.x), py(fadePos.y) - ps(12));
+                  ctx.restore();
+                }
+              }
+            }
           }
-          const pos = interpPt(ph.path, ph.progress);
-          // Glow
-          const g = ctx.createRadialGradient(px(pos.x), py(pos.y), 0, px(pos.x), py(pos.y), ps(10));
-          g.addColorStop(0, wlColor + 'cc'); g.addColorStop(1, wlColor + '00');
-          ctx.fillStyle = g;
-          ctx.beginPath(); ctx.arc(px(pos.x), py(pos.y), ps(10), 0, Math.PI * 2); ctx.fill();
-          if (ph.prevPos) {
-            ctx.beginPath();
-            ctx.moveTo(px(ph.prevPos.x), py(ph.prevPos.y)); ctx.lineTo(px(pos.x), py(pos.y));
-            ctx.strokeStyle = wlColor + '66'; ctx.lineWidth = ps(1.5); ctx.stroke();
-          }
-          ctx.beginPath(); ctx.arc(px(pos.x), py(pos.y), ps(3), 0, Math.PI * 2);
-          ctx.fillStyle = '#fff'; ctx.fill();
-          ph.prevPos = { ...pos };
           return true;
         });
 
@@ -374,21 +473,20 @@ const SceneManager = () => {
       const ry = py(435);
       ctx.fillText(`OPD: ${Math.abs(opd) < 1e-6 ? `${(opd * 1e9).toFixed(1)}nm` : `${(opd * 1e6).toFixed(2)}μm`}`, px(20), ry);
       ctx.fillText(`V: ${(vis * 100).toFixed(1)}%`, px(170), ry);
-      ctx.fillText(`Arm1: ${(armXphys * 1e3).toFixed(1)}mm  Arm2: ${(armYphys * 1e3).toFixed(1)}mm`, px(290), ry);
+      const statusParts = [];
+      if (!st.m1Enabled) statusParts.push('M1:OFF');
+      if (!st.m2Enabled) statusParts.push('M2:OFF');
+      if (!st.bs2Enabled) statusParts.push('BS2:OFF');
+      if (statusParts.length) { ctx.fillStyle = 'rgba(255,100,100,0.4)'; ctx.fillText(statusParts.join(' '), px(290), ry); }
+      else { ctx.fillText(`Arm1: ${(armXphys * 1e3).toFixed(1)}mm  Arm2: ${(armYphys * 1e3).toFixed(1)}mm`, px(290), ry); }
 
-      // Detection stats (top-right)
-      const total = st.simFired;
-      ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = `500 ${ps(9)}px sans-serif`;
-      ctx.fillText(`Sent: ${total}`, px(680), py(20));
+      // Theory display
+      ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = `500 ${ps(9)}px sans-serif`;
+      ctx.fillText(`Sent: ${st.simFired}`, px(680), py(20));
       const { p1: tp1, p2: tp2 } = detectionProbabilities(st.wavelength, opd);
       ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = `${ps(8)}px monospace`;
-      ctx.fillText(`P(D1)=${(tp1 * 100).toFixed(0)}% P(D2)=${(tp2 * 100).toFixed(0)}%`, px(680), py(35));
-
-      // Drag indicator
-      if (dragRef.current.dragging) {
-        ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = `${ps(8)}px sans-serif`; ctx.textAlign = 'center';
-        ctx.fillText('drag to reposition', px(350), py(435));
-      }
+      const interferenceLabel = (st.m1Enabled && st.m2Enabled && st.bs2Enabled) ? '' : ' (no interference)';
+      ctx.fillText(`P(D1)=${(tp1 * 100).toFixed(0)}% P(D2)=${(tp2 * 100).toFixed(0)}%${interferenceLabel}`, px(680), py(35));
 
       ctx.restore();
     };
@@ -402,17 +500,13 @@ const SceneManager = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
     const W = rect.width, H = rect.height;
     const sf = Math.min(W / 700, H / 440);
     const ox = (W - 700 * sf) / 2, oy = (H - 440 * sf) / 2;
     const mx = (e.clientX - rect.left - ox) / sf;
     const my = (e.clientY - rect.top - oy) / sf;
-
-    // Check if clicking near a draggable component
     for (const [name, pos] of Object.entries(positions)) {
-      const dist = Math.hypot(mx - pos.x, my - pos.y);
-      if (dist < 25) {
+      if (Math.hypot(mx - pos.x, my - pos.y) < 25) {
         dragRef.current = { dragging: name, offsetX: mx - pos.x, offsetY: my - pos.y };
         return;
       }
@@ -434,15 +528,12 @@ const SceneManager = () => {
     setPositions(prev => ({ ...prev, [dragRef.current.dragging]: { x: newX, y: newY } }));
   }, []);
 
-  const handleMouseUp = useCallback(() => {
-    dragRef.current.dragging = null;
-  }, []);
+  const handleMouseUp = useCallback(() => { dragRef.current.dragging = null; }, []);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas ref={canvasRef}
-        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         style={{ position: 'absolute', inset: 0, display: 'block', cursor: dragRef.current.dragging ? 'grabbing' : 'default' }} />
       {/* Fire controls */}
       <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 10, display: 'flex', gap: 5, alignItems: 'center' }}>
@@ -452,7 +543,7 @@ const SceneManager = () => {
         <SimBtn label={simRef.current.continuous ? '■ Stop' : '▶ Auto'} onClick={toggleContinuous} active={simRef.current.continuous} />
         <SimBtn label="Reset" onClick={resetCounts} danger />
       </div>
-      {/* Interferometer label + drag hint */}
+      {/* Title + hint */}
       <div style={{ position: 'absolute', top: 8, left: 10, pointerEvents: 'none' }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 2 }}>
           Mach-Zehnder Interferometer

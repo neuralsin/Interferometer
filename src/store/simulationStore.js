@@ -112,6 +112,11 @@ const DEFAULT_PARAMS = {
   /* ===== LEGACY COMPAT ===== */
   mountMaterial:     'invar',
 
+  /* ===== COMPONENT ENABLES (toggleable in toolbar) ===== */
+  m1Enabled: true,
+  m2Enabled: true,
+  bs2Enabled: true,
+
   /* ===== LIVE SIM COUNTS (from SceneManager particle sim) ===== */
   simD1: 0,
   simD2: 0,

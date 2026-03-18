@@ -135,8 +135,9 @@ const BeginnerBottomBar = () => {
 };
 
 const TOOLBAR_ITEMS = [
-  { label: 'M1', desc: 'Mirror 1 — Toggle tip angle (3×10⁻⁴ rad). Changes fringe tilt on detector.', paramKey: 'mirror1Tip', toggle: [0, 3e-4] },
-  { label: 'M2', desc: 'Mirror 2 — Toggle tip angle (2×10⁻⁴ rad). Creates asymmetric fringe pattern.', paramKey: 'mirror2Tip', toggle: [0, 2e-4] },
+  { label: 'M1', desc: 'Mirror 1 — Toggle ON/OFF. When off, arm 1 is blocked (no reflection). Destroys interference.', paramKey: 'm1Enabled', isToggle: true },
+  { label: 'M2', desc: 'Mirror 2 — Toggle ON/OFF. When off, arm 2 is blocked (no reflection). Destroys interference.', paramKey: 'm2Enabled', isToggle: true },
+  { label: 'BS₂', desc: 'Beam Splitter 2 — Toggle ON/OFF. When off, no recombination occurs. Photons go straight to one detector.', paramKey: 'bs2Enabled', isToggle: true },
   { label: 'CP', desc: 'Compensator Plate — Equalizes optical path through BS glass. Essential for white-light fringes.', paramKey: 'compensatorEnabled', isToggle: true },
   { label: 'GW', desc: 'Gravitational Wave — Inject h₀=10⁻²¹ strain signal. Simulates LIGO-like detection.', paramKey: 'gwEnabled', isToggle: true },
   { label: '🔊', desc: 'Seismic Noise — Ground vibration coupling at ~15 Hz. Adds position jitter to mirrors.', paramKey: 'seismicNoiseEnabled', isToggle: true },
