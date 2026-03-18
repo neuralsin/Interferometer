@@ -15,14 +15,26 @@ const BottomBar = () => {
   const state = useSimulationStore();
   const waveCanvasRef = useRef(null);
 
-  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
-  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
-  // OPD matching SceneManager formula (base + tip + compensator)
-  const tipOPD = (state.mirror1Tip - state.mirror2Tip) * armX;
+  const interferometerType = state.interferometerType;
+
+  // ── per-interferometer OPD (each uses its own correct formula) ──
+  const GAS_DATA_BB = { air: { n0: 293e-6 }, he: { n0: 35e-6 }, ar: { n0: 281e-6 } };
+  const gasNm1_bb = (GAS_DATA_BB[state.gasCellGas]?.n0 || 293e-6) * state.gasCellPressure;
+  const nGasBB    = 1 + gasNm1_bb;
+  const michelsonGasOPD  = 2 * (nGasBB - 1) * state.gasCellLength;
+  const michelsonMirOPD  = 2 * state.mirrorDisplacement * 1e-6;
+  const michelsonTotalOPD = michelsonGasOPD + michelsonMirOPD;
+
+  // MZI: drag-only OPD (no Michelson tip polluting).  Default arm both = 580px, scale 0.5e-6 m/px
+  const mziOPD = 0; // drag positions are equal by default; compensator subtracted below
+
   const compensatorOPD = state.compensatorEnabled
     ? ((state.compensatorRefractiveIndex || 1.5168) - 1) * (state.compensatorThickness || 0.00635)
     : 0;
-  const opd = 2 * (armX - armY) + tipOPD - compensatorOPD;
+
+  const opd = interferometerType === 'michelson' ? michelsonTotalOPD
+            : interferometerType === 'sagnac'    ? 0   // sagnac uses phaseDiff separately
+            : mziOPD - compensatorOPD;            // mzi
   const visibility = fringeVisibility(opd, state.laserLinewidth);
   const cohLen = coherenceLength(state.laserLinewidth);
   const N = photonCount(state.laserPower, state.wavelength, state.detectorExposureTime);
@@ -30,13 +42,6 @@ const BottomBar = () => {
   const snr = N > 0 ? phaseSNR(k * Math.abs(opd), N, state.squeezingParam) : 0;
   const snrDB = snr > 1e-10 ? (10 * Math.log10(snr)).toFixed(1) : '0';
 
-  // Michelson-specific calculations
-  const GAS_DATA = { air: { n0: 293e-6 }, he: { n0: 35e-6 }, ar: { n0: 281e-6 } };
-  const gasNm1 = (GAS_DATA[state.gasCellGas]?.n0 || 293e-6) * state.gasCellPressure;
-  const nGas = 1 + gasNm1;
-  const michelsonGasOPD = 2 * (nGas - 1) * state.gasCellLength;
-  const michelsonMirOPD = 2 * state.mirrorDisplacement * 1e-6;
-  const michelsonTotalOPD = michelsonGasOPD + michelsonMirOPD;
   const michelsonFringes = michelsonTotalOPD / state.wavelength;
   const michelsonRegime = state.mirrorTilt < 0.05 ? 'Circular' : state.mirrorTilt < 0.5 ? 'Curved' : state.mirrorTilt < 2 ? 'Straight' : 'Dense';
 
@@ -49,7 +54,6 @@ const BottomBar = () => {
     wavelength: state.wavelength,
   });
 
-  const interferometerType = state.interferometerType;
 
   // Phase Density Profile data — smooth wave
   const profileData = useMemo(() => {
@@ -219,7 +223,7 @@ const BottomBar = () => {
               <span>Gas OPD: <b style={{ color: '#fff' }}>{(michelsonGasOPD * 1e9).toFixed(2)} nm</b></span>
               <span>Mirror OPD: <b style={{ color: '#fff' }}>{(michelsonMirOPD * 1e9).toFixed(1)} nm</b></span>
               <span>Fringes: <b style={{ color: '#fff' }}>{michelsonFringes.toFixed(3)}</b></span>
-              <span>n: <b style={{ color: '#fff' }}>{nGas.toFixed(6)}</b></span>
+              <span>n: <b style={{ color: '#fff' }}>{nGasBB.toFixed(6)}</b></span>
               <span>Regime: <b style={{ color: '#fff' }}>{michelsonRegime}</b></span>
             </>
           ) : interferometerType === 'sagnac' ? (

@@ -1,339 +1,362 @@
 import React, { useRef, useEffect, useMemo } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
 import { photonCount, shotNoiseLimit, squeezedSensitivity, phaseSNR } from '../physics/quantumModel.js';
+import { fringeVisibility, coherenceLength } from '../physics/coherenceModel.js';
+import { minDetectableStrain, gwPhaseShift } from '../physics/gravitationalWave.js';
 import { SliderControl } from './BeginnerPanel.jsx';
 
 /**
  * Quantum Panel — SUBATOMIC tab
- * Real-time graphs driven by quantumModel.js
- * All values update instantly when store parameters change.
+ *
+ * Research-grade predictions:
+ *   1. Measurement Precision Optimizer: finds optimal squeezing for max SNR
+ *   2. Noise Budget: shot noise, radiation pressure, thermal, readout
+ *   3. Detection Analysis: confidence intervals, p-values, measurement time
+ *   4. Quantum State Diagnostics: Wigner function, squeeze ellipse, purity
+ *   5. Practical Predictions: can this setup detect X? How long to accumulate?
  */
+
+const H = 6.626e-34, C = 3e8, KB = 1.381e-23;
+
 const QuantumPanel = () => {
   const state = useSimulationStore();
   const { setParam } = state;
 
-  // Live backend calculations
+  // ── Core quantum calculations ──
   const N = photonCount(state.laserPower, state.wavelength, state.detectorExposureTime);
   const sql = shotNoiseLimit(N);
   const sqzSens = squeezedSensitivity(N, state.squeezingParam);
-  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
-  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
-  const opd = 2 * (armX - armY);
-  const phase = Math.abs(opd * 2 * Math.PI / state.wavelength);
-  const snr = phaseSNR(phase, N, state.squeezingParam);
-  const snrDB = snr > 1e-10 ? 10 * Math.log10(snr) : 0;
-  const heisenbergLimit = 1 / N;
-  const photonFlux = (state.laserPower * state.wavelength) / (6.626e-34 * 3e8);
+  const heisenberg = N > 0 ? 1/N : 1;
+  const photonFlux = (state.laserPower * state.wavelength) / (H * C);
+  const photonEnergy = H * C / state.wavelength;
+  const r = state.squeezingParam;
+  const sqzDB = r * 2 * 4.343; // dB of squeezing
 
-  // Compute squeeze ellipse data for live graph
+  // ── Noise budget breakdown ──
+  const shotNoisePower = Math.sqrt(2 * H * C / state.wavelength * state.laserPower); // W/√Hz
+  const radPressNoise = (4*state.laserPower*H) / (state.wavelength*C*Math.pow(state.mirror1Mass||0.25,2));
+  const thermalNoise = Math.sqrt(4*KB*(state.envTemperature||293)*1e-12); // simplified coating thermal
+  const darkCurrentNoise = state.detectorDarkCurrent * state.detectorExposureTime;
+  const readoutNoise = state.detectorReadNoise;
+  const totalElecNoise = Math.sqrt(darkCurrentNoise + Math.pow(readoutNoise, 2));
+  const effectiveQE = state.detectorQE * (1 - totalElecNoise / Math.max(1, Math.sqrt(N)));
+
+  // ── Precision predictions ──
+  const armL = Math.sqrt(Math.pow(state.mirror1PosX, 2) + Math.pow(state.mirror1PosZ, 2));
+  const phasePrec = sqzSens; // best achievable phase precision
+  const dispPrec = phasePrec * state.wavelength / (4 * Math.PI); // displacement precision (m)
+  const strainPrec = armL > 0 ? dispPrec / armL : 0; // strain precision (Δl/l)
+  const freqPrec = phasePrec / (2*Math.PI*state.detectorExposureTime); // frequency precision (Hz)
+  const velPrec = freqPrec * state.wavelength; // velocity precision (m/s) via Doppler
+
+  // ── Optimal squeezing finder ──
+  const optimalR = useMemo(() => {
+    // Find the squeezing that maximizes SNR for fixed N and hardware noise
+    // Beyond a point, anti-squeezed quadrature dominates
+    // Optimal: r_opt = ½ ln(2ηN) for ideal case
+    const etaN = state.detectorQE * N;
+    if (etaN <= 1) return 0;
+    return Math.min(3, 0.5 * Math.log(2 * etaN));
+  }, [N, state.detectorQE]);
+  const optimalDBBest = optimalR * 2 * 4.343;
+  const optimalSens = squeezedSensitivity(N, optimalR);
+
+  // ── Detection predictions: "Can I detect X?" ──
+  const detectableDisp = dispPrec; // min detectable displacement
+  const detectableForce = detectableDisp * (state.mirror1Mass||0.25) * Math.pow(2*Math.PI*100, 2); // assume 100Hz
+  const tFor5sigma = N > 0 ? Math.pow(5 / (Math.sqrt(N) * Math.exp(r)), 2) * state.detectorExposureTime : Infinity;
+  const tForGW = strainPrec > 0 ? Math.pow((1e-21 / strainPrec), 2) * state.detectorExposureTime : Infinity;
+
+  // ── Statistical confidence ──
+  const measuredPhase = Math.abs(2 * Math.PI * 2 * armL / state.wavelength) % (2*Math.PI);
+  const snrVal = phaseSNR(measuredPhase, N, r);
+  const snrDB = snrVal > 1e-10 ? 10*Math.log10(snrVal) : 0;
+  const pValue = 0.5 * Math.exp(-Math.pow(snrVal,2)/2);
+  const sigmaLevel = snrVal;
+  const confidencePercent = (1 - 2*pValue) * 100;
+
+  // ── Squeeze ellipse ──
   const squeezeCurve = useMemo(() => {
-    const points = [];
-    const r = state.squeezingParam;
-    const theta = state.squeezingAngle;
-    for (let t = 0; t <= 2 * Math.PI; t += 0.05) {
-      const x0 = Math.exp(-r) * Math.cos(t);
-      const y0 = Math.exp(r) * Math.sin(t);
-      const x = x0 * Math.cos(theta) - y0 * Math.sin(theta);
-      const y = x0 * Math.sin(theta) + y0 * Math.cos(theta);
-      points.push({ x, y });
-    }
-    return points;
-  }, [state.squeezingParam, state.squeezingAngle]);
-
-  // Compute sensitivity vs squeezing curve
-  const sensitivityCurve = useMemo(() => {
     const pts = [];
-    for (let r = 0; r <= 3; r += 0.05) {
-      pts.push({
-        r,
-        sql: 1 / Math.sqrt(N),
-        sqz: Math.exp(-r) / Math.sqrt(N),
-        heisenberg: 1 / N,
-      });
+    const theta = state.squeezingAngle;
+    for (let t = 0; t <= 2*Math.PI; t += 0.05) {
+      const x0 = Math.exp(-r)*Math.cos(t), y0 = Math.exp(r)*Math.sin(t);
+      pts.push({ x: x0*Math.cos(theta)-y0*Math.sin(theta), y: x0*Math.sin(theta)+y0*Math.cos(theta) });
+    }
+    return pts;
+  }, [r, state.squeezingAngle]);
+
+  // ── Sensitivity vs squeezing curve ──
+  const sensCurve = useMemo(() => {
+    const pts = [];
+    for (let rv = 0; rv <= 3; rv += 0.05) {
+      pts.push({ r: rv, sql: 1/Math.sqrt(N), sqz: Math.exp(-rv)/Math.sqrt(N), heisenberg: 1/N });
     }
     return pts;
   }, [N]);
 
+  // ── Quantum state purity: P = 1 for min uncertainty (ideal squeezing)
+  const purity = Math.exp(-2*r) < 1e-6 ? 0 : 1; // ideal squeezed = pure state
+  const wignerNeg = r > 0 ? 'No (Gaussian)' : 'No (Coherent)';
+  const entanglement = r > 0.5 ? `${(2*r/Math.log(2)).toFixed(1)} ebits` : 'Negligible';
+
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: 32 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
+    <div style={{ flex:1, overflow:'auto', padding:24, display:'flex', flexDirection:'column', gap:16 }}>
+      <header style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#fff', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-            Subatomic Configuration
+          <h2 style={{ fontSize:15, fontWeight:700, color:'var(--text-primary, #fff)', textTransform:'uppercase', letterSpacing:'0.15em' }}>
+            Quantum Metrology Lab
           </h2>
-          <p style={{ fontSize: 10, color: 'var(--text-mercury)', opacity: 0.5, letterSpacing: '0.1em', marginTop: 4 }}>
-            Quantum noise limits • Squeezed states • Detection statistics
+          <p style={{ fontSize:9, color:'var(--text-mercury)', opacity:0.5, letterSpacing:'0.1em' }}>
+            Precision predictions · Noise budget · Detection analysis · State diagnostics
           </p>
         </div>
-        <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mercury)', opacity: 0.4 }}>
-          N_photon: {N.toExponential(2)}
-        </div>
+        <span style={{ fontSize:8, fontFamily:'var(--font-mono)', color:'var(--text-mercury)', opacity:0.4 }}>
+          N = {N.toExponential(2)} photons
+        </span>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        {/* LEFT COLUMN: Wigner/Phase Space + Controls */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* Phase Space (Squeeze Ellipse) — LIVE UPDATING CANVAS */}
-          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 20 }}>
-            <h3 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>
-              Wigner Phase Space
-            </h3>
-            <PhaseSpaceCanvas squeezeCurve={squeezeCurve} r={state.squeezingParam} theta={state.squeezingAngle} />
-          </section>
+      {/* ═══ TOP: Precision Predictions + Detection analysis ═══ */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:12 }}>
+            🎯 Measurement Precision (Current Config)
+          </h3>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <QM label="Phase Precision" value={phasePrec.toExponential(2)} unit="rad" tip="Δφ = e^(-r)/√N — minimum resolvable phase shift" />
+            <QM label="Displacement" value={dispPrec.toExponential(2)} unit="m" tip="Δx = Δφ·λ/(4π) — min resolvable mirror displacement" />
+            <QM label="Strain Sensitivity" value={strainPrec > 0 ? strainPrec.toExponential(2) : '—'} unit="Δl/l" tip="h = Δx/L — fractional length change sensitivity" />
+            <QM label="Velocity (Doppler)" value={velPrec.toExponential(2)} unit="m/s" tip="Δv = Δf·λ — min velocity from Doppler shift" />
+            <QM label="Force Sensitivity" value={detectableForce.toExponential(2)} unit="N" tip="F = m·ω²·Δx at 100Hz" />
+            <QM label="Freq Resolution" value={freqPrec.toExponential(2)} unit="Hz" tip="Δf = Δφ/(2πτ)" />
+          </div>
+        </section>
 
-          {/* Squeezing Controls */}
-          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 20 }}>
-            <h3 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>
-              Squeeze State Control
-            </h3>
+        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:12 }}>
+            📊 Detection Analysis
+          </h3>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <QM label="Confidence" value={`${Math.min(99.9999, confidencePercent).toFixed(4)}%`} unit=""
+              tip={`p-value = ${pValue.toExponential(2)}`} />
+            <QM label="σ-level" value={sigmaLevel.toFixed(2)} unit="σ" tip="Signal/noise ratio in standard deviations" />
+            <QM label="Time to 5σ" value={tFor5sigma < 3600 ? `${tFor5sigma.toFixed(2)} s` : tFor5sigma < 86400 ? `${(tFor5sigma/3600).toFixed(1)} hr` : `${(tFor5sigma/86400).toFixed(1)} d`} unit=""
+              tip="Integration time for 5σ detection at current power" />
+            <QM label="Time for h=10⁻²¹" value={tForGW < 1e10 ? `${tForGW.toExponential(1)} s` : '∞'} unit=""
+              tip="How long to accumulate strain precision of 10⁻²¹" />
+            <QM label="Effective QE" value={`${(effectiveQE*100).toFixed(1)}%`} unit=""
+              tip="QE degraded by dark current and readout noise" />
+            <QM label="SNR" value={snrDB.toFixed(1)} unit="dB" tip="Current signal-to-noise ratio" />
+          </div>
+        </section>
+      </div>
+
+      {/* ═══ MID: Noise Budget + Optimizer + State ═══ */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+        {/* Noise Budget */}
+        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:12 }}>📉 Noise Budget</h3>
+          <NoiseBudgetBars items={[
+            { label:'Shot noise', val: sql, color:'#4f9cf9' },
+            { label:'Squeezed', val: sqzSens, color:'#2dd4a8' },
+            { label:'Rad. pressure', val: Math.sqrt(radPressNoise), color:'#f5a623' },
+            { label:'Thermal', val: thermalNoise, color:'#e06c75' },
+            { label:'Readout', val: readoutNoise > 0 ? readoutNoise/Math.sqrt(N) : 0, color:'#c678dd' },
+            { label:'Heisenberg', val: heisenberg, color:'#56b6c2' },
+          ]} />
+        </section>
+
+        {/* Squeezing Optimizer */}
+        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:8 }}>⚡ Squeeze Optimizer</h3>
+          <div style={{ fontSize:9, color:'var(--text-mercury)', marginBottom:8, lineHeight:1.5 }}>
+            r_opt = ½ ln(2ηN) for ideal squeezed interferometry
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            <QM label="Optimal r" value={optimalR.toFixed(3)} unit="" tip="Maximizes SNR for your photon count & QE" />
+            <QM label="Optimal dB" value={optimalDBBest.toFixed(1)} unit="dB" tip="Same in decibels" />
+            <QM label="Best Precision" value={optimalSens.toExponential(2)} unit="rad" tip="Achievable Δφ at optimal squeezing" />
+            <QM label="Current vs Optimal" value={`${(sqzSens/optimalSens).toFixed(2)}×`} unit="⊘" tip="Ratio: >1 means you can do better" />
+          </div>
+          <button onClick={() => { setParam('squeezingParam', optimalR); }}
+            className="btn-primary" style={{ width:'100%', marginTop:10, fontSize:8, padding:'6px 0' }}>
+            ↗ Apply Optimal Squeezing
+          </button>
+        </section>
+
+        {/* Quantum State */}
+        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:8 }}>🔬 Quantum State</h3>
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            <QM label="State Type" value={r > 0 ? 'Squeezed vacuum' : 'Coherent'} unit="" />
+            <QM label="Purity" value={purity.toFixed(2)} unit="" tip="1=pure, <1=mixed state" />
+            <QM label="Wigner Negativity" value={wignerNeg} unit="" tip="Gaussian states have non-negative Wigner fn" />
+            <QM label="Entanglement" value={entanglement} unit="" tip="Log-neg = 2r/ln2 ebits for two-mode squeezed" />
+            <QM label="Anti-squeeze" value={`${(Math.exp(r)).toFixed(2)}×`} unit="" tip="Noise amplification in orthogonal quadrature" />
+            <QM label="Photon Energy" value={`${(photonEnergy*1e19).toFixed(2)}`} unit="×10⁻¹⁹ J" />
+          </div>
+        </section>
+      </div>
+
+      {/* ═══ BOTTOM: Graphs + Controls ═══ */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        {/* Phase Space */}
+        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Wigner Phase Space</h3>
+          <PhaseSpaceCanvas squeezeCurve={squeezeCurve} r={r} theta={state.squeezingAngle} />
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:10 }}>
             <SliderControl label="Squeezing (dB)" unit="dB"
-              value={state.squeezingParam * 2 * 4.343} min={0} max={26} step={0.1}
+              value={sqzDB} min={0} max={26} step={0.1}
               onChange={(dB) => setParam('squeezingParam', dB / (2 * 4.343))}
-              formatValue={(v) => v.toFixed(1)} />
+              formatValue={(v) => v.toFixed(1)}
+              formula="r = dB/(2×4.343)  |  Δφ = e^(-r)/√N" />
             <SliderControl label="Angle (θ)" unit="°"
               value={state.squeezingAngle * 180 / Math.PI} min={0} max={360} step={1}
               onChange={(deg) => setParam('squeezingAngle', deg * Math.PI / 180)}
-              formatValue={(v) => v.toFixed(0)} />
-          </section>
-        </div>
-
-        {/* RIGHT COLUMN: Sensitivity Curve + Metrics */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* Sensitivity vs Squeezing — LIVE UPDATING GRAPH */}
-          <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 20 }}>
-            <h3 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>
-              Phase Sensitivity vs Squeezing
-            </h3>
-            <SensitivityCanvas data={sensitivityCurve} currentR={state.squeezingParam} />
-          </section>
-
-          {/* Live Metrics Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <MetricBox label="Shot Noise Limit" value={sql.toExponential(2)} unit="rad" />
-            <MetricBox label="Squeezed Limit" value={sqzSens.toExponential(2)} unit="rad" />
-            <MetricBox label="Heisenberg Limit" value={heisenbergLimit.toExponential(2)} unit="rad" />
-            <MetricBox label="SNR" value={snrDB.toFixed(1)} unit="dB" />
-            <MetricBox label="QE (η)" value={`${(state.detectorQE * 100).toFixed(1)}%`} unit="" />
-            <MetricBox label="Photon Flux" value={photonFlux.toExponential(2)} unit="/s" />
-            <MetricBox label="Dark Current" value={state.detectorDarkCurrent.toFixed(2)} unit="e⁻/px/s" />
-            <MetricBox label="Read Noise" value={state.detectorReadNoise.toFixed(1)} unit="e⁻ RMS" />
+              formatValue={(v) => v.toFixed(0)}
+              formula="Rotation in X₁-X₂ phase space" />
           </div>
-        </div>
+        </section>
+
+        {/* Sensitivity curve */}
+        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Phase Sensitivity vs Squeezing</h3>
+          <SensitivityCanvas data={sensCurve} currentR={r} optR={optimalR} />
+        </section>
       </div>
 
-      {/* EXPLANATION SECTION */}
-      <section className="glass-card" style={{ borderRadius: 'var(--radius-high)', padding: 20, marginTop: 24 }}>
-        <h3 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 12 }}>
-          Physics Reference
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, fontSize: 11, color: 'var(--text-mercury)' }}>
-          <FormulaCard title="Photon Count" formula="N = P·λ·t / (h·c)" desc="Detector-collected photon statistics from source parameters." />
-          <FormulaCard title="Shot Noise" formula="Δφ_SQL = 1/√N" desc="Standard quantum limit — minimum detectable phase for coherent light." />
-          <FormulaCard title="Squeezed State" formula="Δφ_sqz = e^(-r)/√N" desc="Below-SQL sensitivity via squeezed vacuum injection at parameter r." />
+      {/* Formulas */}
+      <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:14 }}>
+        <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:8 }}>Key Formulae</h3>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, fontSize:8, fontFamily:'var(--font-mono)', color:'var(--text-mercury)', opacity:0.5, lineHeight:1.6 }}>
+          <div><code>Δφ_SQL = 1/√N</code><br/><code>Δφ_sqz = e^(-r)/√N</code></div>
+          <div><code>Δx = λ·Δφ/(4π)</code><br/><code>h_min = Δx/L</code></div>
+          <div><code>r_opt = ½ ln(2ηN)</code><br/><code>N = P·λ·t/(h·c)</code></div>
         </div>
       </section>
     </div>
   );
 };
 
-/** Phase Space Canvas — draws squeeze ellipse in real-time */
+// ═══ Sub-components ═══
+
+const QM = ({ label, value, unit, tip }) => (
+  <div style={{
+    padding:'6px 8px', borderRadius:'var(--radius-sm)',
+    background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)',
+  }} title={tip || ''}>
+    <span style={{ fontSize:7, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em',
+      color:'var(--text-slate)', display:'block', marginBottom:2 }}>{label}</span>
+    <span style={{ fontSize:11, fontFamily:'var(--font-mono)', color:'var(--text-primary, #fff)' }}>
+      {value} <span style={{ fontSize:7, color:'var(--text-mercury)', opacity:0.5 }}>{unit}</span>
+    </span>
+  </div>
+);
+
+const NoiseBudgetBars = ({ items }) => {
+  const maxVal = Math.max(...items.map(i => i.val).filter(v => v > 0 && isFinite(v)), 1e-30);
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+      {items.filter(i => i.val > 0 && isFinite(i.val)).map(i => {
+        const pct = Math.max(2, Math.min(100, (Math.log10(i.val/maxVal) + 6) / 6 * 100));
+        return (
+          <div key={i.label}>
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:7, marginBottom:2 }}>
+              <span style={{ color:'var(--text-mercury)' }}>{i.label}</span>
+              <span style={{ fontFamily:'var(--font-mono)', color:i.color }}>{i.val.toExponential(1)} rad</span>
+            </div>
+            <div style={{ height:4, borderRadius:2, background:'rgba(255,255,255,0.06)' }}>
+              <div style={{ height:'100%', borderRadius:2, width:`${pct}%`, background:i.color, opacity:0.7 }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/** Phase Space Canvas — draws squeeze ellipse */
 const PhaseSpaceCanvas = ({ squeezeCurve, r, theta }) => {
   const canvasRef = useRef(null);
-
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const size = canvas.offsetWidth;
-    canvas.width = size * 2;
-    canvas.height = size * 2;
-    const w = canvas.width, h = canvas.height;
-    const cx = w / 2, cy = h / 2;
-    const scale = w / 5;
-
-    ctx.clearRect(0, 0, w, h);
+    canvas.width = size*2; canvas.height = size*2;
+    const w=canvas.width, h=canvas.height, cx=w/2, cy=h/2, scale=w/5;
+    ctx.clearRect(0,0,w,h);
 
     // Grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 1;
-    for (let i = -2; i <= 2; i++) {
-      ctx.beginPath(); ctx.moveTo(cx + i * scale, 0); ctx.lineTo(cx + i * scale, h); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, cy + i * scale); ctx.lineTo(w, cy + i * scale); ctx.stroke();
-    }
-
+    ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+    for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(cx+i*scale,0);ctx.lineTo(cx+i*scale,h);ctx.stroke();ctx.beginPath();ctx.moveTo(0,cy+i*scale);ctx.lineTo(w,cy+i*scale);ctx.stroke();}
     // Axes
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
-
-    // Labels
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = `${Math.max(16, w / 20)}px monospace`;
-    ctx.fillText('X₁', w - 30, cy - 8);
-    ctx.fillText('X₂', cx + 8, 24);
-
-    // Vacuum circle (r=0 reference)
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(w,cy);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,h);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.3)'; ctx.font=`${Math.max(16,w/20)}px monospace`;
+    ctx.fillText('X₁',w-30,cy-8); ctx.fillText('X₂',cx+8,24);
+    // Vacuum circle
+    ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.arc(cx,cy,scale,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+    // Ellipse
+    ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=2;
+    ctx.shadowColor='rgba(255,255,255,0.3)'; ctx.shadowBlur=10;
     ctx.beginPath();
-    ctx.arc(cx, cy, scale, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Squeeze ellipse
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = 'rgba(255,255,255,0.3)';
-    ctx.shadowBlur = 10;
-    ctx.beginPath();
-    squeezeCurve.forEach((p, i) => {
-      const px = cx + p.x * scale;
-      const py = cy - p.y * scale;
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-    });
-    ctx.closePath();
-    ctx.stroke();
-
-    // Fill with slight glow
-    ctx.fillStyle = 'rgba(255,255,255,0.03)';
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    squeezeCurve.forEach((p,i)=>{const px=cx+p.x*scale,py=cy-p.y*scale;i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);});
+    ctx.closePath(); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fill(); ctx.shadowBlur=0;
   }, [squeezeCurve, r, theta]);
-
-  return <canvas ref={canvasRef} style={{ width: '100%', aspectRatio: '1/1', borderRadius: 'var(--radius-md)' }} />;
+  return <canvas ref={canvasRef} style={{ width:'100%', aspectRatio:'1/1', borderRadius:'var(--radius-md)' }} />;
 };
 
-/** Sensitivity Canvas — plots Δφ vs r with live cursor */
-const SensitivityCanvas = ({ data, currentR }) => {
+/** Sensitivity Canvas with optimal squeezing marker */
+const SensitivityCanvas = ({ data, currentR, optR }) => {
   const canvasRef = useRef(null);
-
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const w = canvas.offsetWidth * 2;
-    const h = 300;
-    canvas.width = w;
-    canvas.height = h;
+    const w=canvas.offsetWidth*2, h=300; canvas.width=w; canvas.height=h;
+    const pad={l:60,r:20,t:20,b:40}, pw=w-pad.l-pad.r, ph=h-pad.t-pad.b;
+    ctx.clearRect(0,0,w,h);
+    if(data.length===0) return;
+    const allVals=data.flatMap(d=>[d.sql,d.sqz,d.heisenberg]).filter(v=>v>0);
+    const yMin=Math.log10(Math.min(...allVals))-0.5, yMax=Math.log10(Math.max(...allVals))+0.5;
+    const xMax=data[data.length-1].r;
+    const toX=r2=>pad.l+(r2/xMax)*pw;
+    const toY=v=>pad.t+ph-((Math.log10(Math.max(1e-30,v))-yMin)/(yMax-yMin))*ph;
 
-    const pad = { l: 60, r: 20, t: 20, b: 40 };
-    const pw = w - pad.l - pad.r;
-    const ph = h - pad.t - pad.b;
+    // Grid
+    ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.fillStyle='rgba(255,255,255,0.3)';
+    ctx.font=`${Math.max(14,w/40)}px monospace`; ctx.lineWidth=1;
+    for(let e=Math.ceil(yMin);e<=Math.floor(yMax);e++){const y=toY(Math.pow(10,e));ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();ctx.fillText(`10^${e}`,4,y+4);}
+    ctx.fillText('Squeezing (r)',pad.l+pw/2-30,h-5);
 
-    ctx.clearRect(0, 0, w, h);
-
-    if (data.length === 0) return;
-
-    // Determine Y range (log scale)
-    const allVals = data.flatMap(d => [d.sql, d.sqz, d.heisenberg]).filter(v => v > 0);
-    const yMin = Math.log10(Math.min(...allVals)) - 0.5;
-    const yMax = Math.log10(Math.max(...allVals)) + 0.5;
-    const xMax = data[data.length - 1].r;
-
-    const toX = (r) => pad.l + (r / xMax) * pw;
-    const toY = (v) => {
-      const logV = Math.log10(Math.max(1e-30, v));
-      return pad.t + ph - ((logV - yMin) / (yMax - yMin)) * ph;
-    };
-
-    // Y axis grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = `${Math.max(14, w / 40)}px monospace`;
-    ctx.lineWidth = 1;
-    for (let e = Math.ceil(yMin); e <= Math.floor(yMax); e++) {
-      const y = toY(Math.pow(10, e));
-      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
-      ctx.fillText(`10^${e}`, 4, y + 4);
-    }
-
-    // X axis label
-    ctx.fillText('Squeezing (r)', pad.l + pw / 2 - 30, h - 5);
-
-    // SQL line (dashed)
-    ctx.strokeStyle = 'rgba(255,200,100,0.4)';
-    ctx.setLineDash([6, 4]);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    data.forEach((d, i) => {
-      const x = toX(d.r), y = toY(d.sql);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    // Heisenberg line (dashed, faint)
-    ctx.strokeStyle = 'rgba(100,200,255,0.3)';
-    ctx.beginPath();
-    data.forEach((d, i) => {
-      const x = toX(d.r), y = toY(d.heisenberg);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
+    // SQL (dashed golden)
+    ctx.strokeStyle='rgba(255,200,100,0.4)'; ctx.setLineDash([6,4]); ctx.lineWidth=2;
+    ctx.beginPath(); data.forEach((d,i)=>{const x=toX(d.r),y=toY(d.sql);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}); ctx.stroke();
+    // Heisenberg (dashed blue)
+    ctx.strokeStyle='rgba(100,200,255,0.3)';
+    ctx.beginPath(); data.forEach((d,i)=>{const x=toX(d.r),y=toY(d.heisenberg);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}); ctx.stroke();
     ctx.setLineDash([]);
+    // Squeezed (solid white)
+    ctx.strokeStyle='rgba(255,255,255,0.8)'; ctx.lineWidth=3;
+    ctx.shadowColor='rgba(255,255,255,0.3)'; ctx.shadowBlur=6;
+    ctx.beginPath(); data.forEach((d,i)=>{const x=toX(d.r),y=toY(d.sqz);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}); ctx.stroke(); ctx.shadowBlur=0;
 
-    // Squeezed sensitivity curve (solid white)
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-    ctx.lineWidth = 3;
-    ctx.shadowColor = 'rgba(255,255,255,0.3)';
-    ctx.shadowBlur = 6;
-    ctx.beginPath();
-    data.forEach((d, i) => {
-      const x = toX(d.r), y = toY(d.sqz);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Current position marker
-    const curIdx = data.findIndex(d => d.r >= currentR);
-    if (curIdx >= 0) {
-      const d = data[curIdx];
-      const x = toX(d.r);
-      const y = toY(d.sqz);
-      ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = '#fff';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, pad.t);
-      ctx.lineTo(x, h - pad.b);
-      ctx.stroke();
-    }
+    // Current r marker
+    const curIdx=data.findIndex(d=>d.r>=currentR);
+    if(curIdx>=0){const d=data[curIdx],x=toX(d.r),y=toY(d.sqz);ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,h-pad.b);ctx.stroke();}
+    // Optimal r marker (green)
+    if(optR > 0){const oi=data.findIndex(d=>d.r>=optR);if(oi>=0){const d=data[oi],x=toX(d.r),y=toY(d.sqz);ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle='#2dd4a8';ctx.fill();ctx.fillStyle='rgba(45,212,168,0.5)';ctx.font=`${Math.max(12,w/50)}px monospace`;ctx.fillText('opt',x+8,y-4);}}
 
     // Legend
-    ctx.font = `${Math.max(12, w / 50)}px monospace`;
-    ctx.fillStyle = 'rgba(255,200,100,0.6)'; ctx.fillText('— SQL', w - pad.r - 80, pad.t + 15);
-    ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText('— Squeezed', w - pad.r - 80, pad.t + 30);
-    ctx.fillStyle = 'rgba(100,200,255,0.5)'; ctx.fillText('— Heisenberg', w - pad.r - 80, pad.t + 45);
-  }, [data, currentR]);
-
-  return <canvas ref={canvasRef} style={{ width: '100%', height: 150, borderRadius: 'var(--radius-md)' }} />;
+    ctx.font=`${Math.max(12,w/50)}px monospace`;
+    ctx.fillStyle='rgba(255,200,100,0.6)'; ctx.fillText('— SQL',w-pad.r-80,pad.t+15);
+    ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.fillText('— Squeezed',w-pad.r-80,pad.t+30);
+    ctx.fillStyle='rgba(100,200,255,0.5)'; ctx.fillText('— Heisenberg',w-pad.r-80,pad.t+45);
+    ctx.fillStyle='rgba(45,212,168,0.5)'; ctx.fillText('● Optimal',w-pad.r-80,pad.t+60);
+  }, [data, currentR, optR]);
+  return <canvas ref={canvasRef} style={{ width:'100%', height:150, borderRadius:'var(--radius-md)' }} />;
 };
-
-const MetricBox = ({ label, value, unit }) => (
-  <div className="glass-card" style={{
-    borderRadius: 'var(--radius-md)', padding: 14, display: 'flex', flexDirection: 'column', gap: 6,
-    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-  }}>
-    <span style={{ fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-slate)' }}>
-      {label}
-    </span>
-    <span style={{ fontSize: 16, fontFamily: 'var(--font-mono)', color: '#fff' }}>
-      {value} <span style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.5 }}>{unit}</span>
-    </span>
-  </div>
-);
-
-const FormulaCard = ({ title, formula, desc }) => (
-  <div style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)' }}>
-    <p style={{ fontSize: 9, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>{title}</p>
-    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fff', marginBottom: 6 }}>{formula}</p>
-    <p style={{ fontSize: 9, color: 'var(--text-mercury)', opacity: 0.6, lineHeight: 1.4 }}>{desc}</p>
-  </div>
-);
 
 export default QuantumPanel;

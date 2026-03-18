@@ -136,8 +136,6 @@ const PhysicsNoisePanel = () => {
       const numPoints = 200;
       const fMin = 0.1, fMax = 20000;
       const linewidth = state.laserLinewidth;
-      const maxPSD = lorentzianPSD(0, linewidth);
-      const maxPSDdB = maxPSD > 0 ? 10 * Math.log10(maxPSD) : 0;
       const points = [];
 
       for (let i = 0; i < numPoints; i++) {
@@ -148,10 +146,17 @@ const PhysicsNoisePanel = () => {
         points.push({ freq, psdDB });
       }
 
-      const yMin = maxPSDdB - 60;
-      const yMax = maxPSDdB + 5;
+      // Fixed dB window — prevents stretching to infinity when linewidth changes
+      const allDB = points.map(p => p.psdDB).filter(d => isFinite(d));
+      const peakDB = Math.max(...allDB);
+      // Always show a 60 dB range below peak, clamped to reasonable values
+      const yMax = Math.min(100, Math.max(0, Math.ceil(peakDB / 10) * 10 + 5));
+      const yMin = yMax - 65;
       const toX = (f) => pad.left + (Math.log10(f / fMin) / Math.log10(fMax / fMin)) * plotW;
-      const toY = (db) => pad.top + plotH * (1 - (db - yMin) / (yMax - yMin));
+      const toY = (db) => {
+        const cdb = Math.max(yMin, Math.min(yMax, db));
+        return pad.top + plotH * (1 - (cdb - yMin) / (yMax - yMin));
+      };
 
       // Grid lines
       ctx.strokeStyle = 'rgba(255,255,255,0.04)';

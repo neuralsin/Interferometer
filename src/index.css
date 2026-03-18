@@ -14,12 +14,14 @@
   --border-active: rgba(255, 255, 255, 0.25);
 
   --text-white: #ffffff;
+  --text-primary: #ffffff;
   --text-silver-100: #f1f5f9;
   --text-silver-200: #e2e8f0;
   --text-silver-300: #cbd5e1;
   --text-silver-400: #94a3b8;
   --text-mercury: #9ca3af;
   --text-slate: #64748b;
+  --canvas-bg: #050505;
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
@@ -46,12 +48,15 @@
   --border-active: rgba(0, 0, 0, 0.3);
 
   --text-white: #111827;
+  --text-primary: #111827;
   --text-silver-100: #1f2937;
   --text-silver-200: #374151;
   --text-silver-300: #4b5563;
   --text-silver-400: #6b7280;
   --text-mercury: #6b7280;
   --text-slate: #9ca3af;
+
+  --canvas-bg: #1a1a2e;
 
   --shadow-glass: 0 4px 16px 0 rgba(0, 0, 0, 0.08);
   --shadow-glow: 0 0 10px rgba(0, 0, 0, 0.05);
@@ -179,6 +184,87 @@
 /* Scrollbar */
 [data-theme="light"] ::-webkit-scrollbar-track { background: #eee; }
 [data-theme="light"] ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
+
+/* Canvas scenes: KEEP dark background even in light mode — canvases draw white content */
+[data-theme="light"] canvas {
+  background: var(--canvas-bg) !important;
+  border-radius: var(--radius-md);
+}
+
+/* All panels: override hardcoded color:#fff to use dark text */
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] h3,
+[data-theme="light"] h4 {
+  color: #111827 !important;
+}
+
+/* Bold metric values: override color:#fff */
+[data-theme="light"] b {
+  color: #111827 !important;
+}
+
+/* Code/formula blocks */
+[data-theme="light"] code {
+  color: #374151 !important;
+}
+
+/* Toggle tracks */
+[data-theme="light"] .toggle-track {
+  background: rgba(0,0,0,0.08) !important;
+}
+[data-theme="light"] .toggle-track[data-active="true"] {
+  background: rgba(0,0,0,0.2) !important;
+}
+
+/* Number input rows */
+[data-theme="light"] .number-input-row {
+  background: rgba(0,0,0,0.03) !important;
+  border-color: rgba(0,0,0,0.06) !important;
+}
+[data-theme="light"] .number-input-row input[type="number"] {
+  background: rgba(0,0,0,0.06) !important;
+  color: #111827 !important;
+}
+
+/* Section divider */
+[data-theme="light"] .section-divider {
+  border-top-color: rgba(0,0,0,0.08) !important;
+}
+
+/* Select dropdown */
+[data-theme="light"] select {
+  background: rgba(255,255,255,0.9) !important;
+  color: #374151 !important;
+  border-color: rgba(0,0,0,0.12) !important;
+}
+
+/* Viewport overlay: readable in light mode */
+[data-theme="light"] .viewport-overlay {
+  background: rgba(255,255,255,0.85) !important;
+  border-color: rgba(0,0,0,0.1) !important;
+  color: #374151 !important;
+}
+[data-theme="light"] .viewport-overlay p,
+[data-theme="light"] .viewport-overlay span,
+[data-theme="light"] .viewport-overlay b {
+  color: #111827 !important;
+}
+
+/* All flex/grid inline-styled text '*/
+[data-theme="light"] [style*="color: '#fff'"],
+[data-theme="light"] [style*="color: #fff"],
+[data-theme="light"] [style*="color:'#fff'"] {
+  color: #111827 !important;
+}
+
+/* Bottom bar bold values */
+[data-theme="light"] .app-bottom-bar b {
+  color: #111827 !important;
+}
+[data-theme="light"] .app-bottom-bar canvas {
+  background: var(--canvas-bg) !important;
+}
 
 /* ---- Reset ---- */
 *, *::before, *::after {

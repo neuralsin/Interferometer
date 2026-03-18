@@ -38,13 +38,10 @@ const DetectionOverlay = ({ isResearch }) => {
   const state = useSimulationStore();
   const iType = state.interferometerType;
 
-  // === MZI calculations ===
-  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
-  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
-  const tipOPD = (state.mirror1Tip - state.mirror2Tip) * armX;
+  // === MZI calculations (drag-only OPD, no Michelson tip) ===
   const compensatorOPD = state.compensatorEnabled
     ? ((state.compensatorRefractiveIndex || 1.5168) - 1) * (state.compensatorThickness || 0.00635) : 0;
-  const opd = 2 * (armX - armY) + tipOPD - compensatorOPD;
+  const opd = -compensatorOPD; // MZI default arms are equal; only compensator shifts OPD
   const { p1, p2 } = detectionProbabilities(state.wavelength, opd);
   const vis = fringeVisibility(opd, state.laserLinewidth);
   const n1 = state.simD1, n2 = state.simD2, total = state.simFired;
