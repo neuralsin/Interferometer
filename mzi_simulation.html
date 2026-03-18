@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interferometer Experiments</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --bg2: #13161e;
+    --bg3: #1a1e28;
+    --border: #2a2f3e;
+    --border2: #353c50;
+    --text: #e2e4ec;
+    --text2: #8b90a8;
+    --text3: #555c78;
+    --accent: #4f9cf9;
+    --accent2: #6fc3ff;
+    --teal: #2dd4a8;
+    --amber: #f5a623;
+    --red: #f06060;
+    --purple: #a78bfa;
+    --green: #4ade80;
+    --panel: #161a24;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+
+  header {
+    width: 100%;
+    max-width: 980px;
+    padding: 12px 0 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 14px;
+  }
+
+  header h1 {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text2);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  header p { font-size: 12px; color: var(--text3); margin-top: 3px; }
+
+  .app { width: 100%; max-width: 980px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* Tab rows */
+  .tab-row {
+    display: flex; gap: 4px;
+  }
+  .tab {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .tab:hover { background: var(--bg3); color: var(--text); }
+  .tab.active { background: var(--bg3); color: var(--text); border-color: var(--border2); }
+  .tab.entity-photon.active  { border-color: var(--accent); color: var(--accent2); }
+  .tab.entity-wave.active    { border-color: var(--teal); color: var(--teal); }
+  .tab.entity-particle.active { border-color: var(--amber); color: var(--amber); }
+
+  .tab-label { font-size: 10px; color: var(--text3); margin-right: 6px; text-transform: uppercase; letter-spacing: 0.07em; align-self: center; }
+
+  /* Main layout */
+  .main { display: flex; gap: 10px; }
+
+  /* Canvas panel */
+  .canvas-wrap {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+  #simCanvas { display: block; width: 100%; }
+
+  /* Right controls */
+  .controls {
+    width: 220px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ctrl-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .ctrl-card h3 {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 10px;
+  }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat {
+    background: var(--bg3);
+    border-radius: 5px;
+    padding: 7px 9px;
+  }
+  .stat .s-label { font-size: 10px; color: var(--text3); margin-bottom: 2px; }
+  .stat .s-val { font-size: 18px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+  .stat.d1 .s-val { color: var(--teal); }
+  .stat.d2 .s-val { color: var(--accent); }
+  .stat .s-pct { font-size: 10px; color: var(--text3); margin-top: 1px; font-family: 'IBM Plex Mono', monospace; }
+
+  .fired-stat { text-align: center; margin-bottom: 8px; }
+  .fired-stat .big { font-size: 26px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; color: var(--text); }
+  .fired-stat .lbl { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .bar-wrap { margin-top: 8px; }
+  .bar-lbl { display: flex; justify-content: space-between; font-size: 10px; color: var(--text3); margin-bottom: 3px; }
+  .bar-track { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+  .bar-fill.d1 { background: var(--teal); }
+  .bar-fill.d2 { background: var(--accent); }
+
+  /* Buttons */
+  .btn-group { display: flex; flex-direction: column; gap: 5px; }
+  .btn {
+    width: 100%;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 500;
+    border-radius: 5px;
+    border: 1px solid var(--border2);
+    background: var(--bg3);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .btn:hover:not(:disabled) { background: var(--border); }
+  .btn:active:not(:disabled) { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { background: var(--accent2); }
+  .btn.danger { border-color: var(--border); color: var(--text3); }
+
+  /* Toggle */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+  }
+  .toggle-row:last-child { border-bottom: none; margin-bottom: 0; }
+  .toggle-label { font-size: 12px; color: var(--text2); }
+  .toggle-sub { font-size: 10px; color: var(--text3); }
+  .switch { position: relative; width: 34px; height: 19px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .slider:before {
+    content: '';
+    position: absolute;
+    width: 13px; height: 13px;
+    left: 2px; top: 2px;
+    background: var(--text3);
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+  input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  input:checked + .slider:before { transform: translateX(15px); background: #fff; }
+  .wpd-on input:checked + .slider { background: var(--amber); border-color: var(--amber); }
+
+  /* Slider control */
+  .range-row { margin: 4px 0; }
+  .range-row .range-hdr { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+  .range-row .range-val { font-family: 'IBM Plex Mono', monospace; color: var(--text); }
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--bg3);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+  }
+
+  /* Info panel */
+  .info-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text2);
+  }
+  .info-panel .info-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+  .info-panel .info-title.photon { color: var(--accent); }
+  .info-panel .info-title.wave   { color: var(--teal); }
+  .info-panel .info-title.particle { color: var(--amber); }
+  .info-panel em { color: var(--text); font-style: normal; font-weight: 500; }
+
+  /* Speed */
+  .speed-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text3); }
+  .speed-row input { flex: 1; }
+
+  /* Badge */
+  .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .badge.on  { background: rgba(245,166,35,0.15); color: var(--amber); border: 1px solid rgba(245,166,35,0.3); }
+  .badge.off { background: rgba(45,212,168,0.1);  color: var(--teal);  border: 1px solid rgba(45,212,168,0.25); }
+
+  .theory-row {
+    font-size: 10px;
+    color: var(--text3);
+    font-family: 'IBM Plex Mono', monospace;
+    margin-top: 4px;
+  }
+
+  /* wave amplitude display */
+  #ampCanvas { display: block; width: 100%; border-radius: 4px; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Interferometer Experiments — Photons, Particles &amp; Waves</h1>
+  <p>Compare classical particles, electromagnetic waves, and single photons through beamsplitter / MZI setups</p>
+</header>
+
+<div class="app">
+
+  <!-- Top tab row: entity selection -->
+  <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <span class="tab-label">Entity</span>
+    <div class="tab-row" id="entityTabs">
+      <button class="tab entity-photon active" data-entity="photon">Single Photons</button>
+      <button class="tab entity-wave" data-entity="wave">EM Wave</button>
+      <button class="tab entity-particle" data-entity="particle">Classical Particles</button>
+    </div>
+    <span class="tab-label" style="margin-left:12px;">Setup</span>
+    <div class="tab-row" id="setupTabs">
+      <button class="tab active" data-setup="bs">Single Beamsplitter</button>
+      <button class="tab" data-setup="mzi">Full MZI</button>
+    </div>
+  </div>
+
+  <!-- Main area -->
+  <div class="main">
+
+    <!-- Canvas -->
+    <div class="canvas-wrap">
+      <canvas id="simCanvas" height="440"></canvas>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+
+      <!-- Stats card -->
+      <div class="ctrl-card">
+        <h3>Detection counts</h3>
+        <div class="fired-stat">
+          <div class="lbl">Sent</div>
+          <div class="big" id="firedVal">0</div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat d1">
+            <div class="s-label">Detector 1</div>
+            <div class="s-val" id="d1Val">0</div>
+            <div class="s-pct" id="d1Pct">—</div>
+          </div>
+          <div class="stat d2">
+            <div class="s-label">Detector 2</div>
+            <div class="s-val" id="d2Val">0</div>
+            <div class="s-pct" id="d2Pct">—</div>
+          </div>
+        </div>
+        <div class="bar-wrap">
+          <div class="bar-lbl"><span>D1</span><span id="d1BarPct">0%</span></div>
+          <div class="bar-track"><div class="bar-fill d1" id="d1Bar" style="width:0%"></div></div>
+        </div>
+        <div class="bar-wrap" style="margin-top:5px;">
+          <div class="bar-lbl"><span>D2</span><span id="d2BarPct">0%</span></div>
+          <div class="bar-track"><div class="bar-fill d2" id="d2Bar" style="width:0%"></div></div>
+        </div>
+        <div class="theory-row" id="theoryRow"></div>
+      </div>
+
+      <!-- Fire buttons -->
+      <div class="ctrl-card">
+        <h3>Send</h3>
+        <div class="btn-group">
+          <button class="btn primary" id="btn1">Send 1</button>
+          <button class="btn" id="btn50">Send 50</button>
+          <button class="btn" id="btn500">Send 500</button>
+          <button class="btn danger" id="btnReset">Reset counts</button>
+        </div>
+        <div class="speed-row" style="margin-top:10px;">
+          <span>Speed</span>
+          <input type="range" id="speedSlider" min="1" max="10" value="5" step="1">
+          <span id="speedVal">5</span>
+        </div>
+      </div>
+
+      <!-- MZI phase (shown only in MZI mode) -->
+      <div class="ctrl-card" id="phaseCard">
+        <h3>Phase shifter</h3>
+        <div class="range-row">
+          <div class="range-hdr"><span>Δφ</span><span class="range-val" id="phaseValDisp">0°</span></div>
+          <input type="range" id="phaseSlider" min="0" max="360" value="0" step="1">
+        </div>
+      </div>
+
+      <!-- Which-path detector (photon + MZI only) -->
+      <div class="ctrl-card" id="wpdCard">
+        <h3>Which-path detector <span class="badge off" id="wpdBadge">OFF</span></h3>
+        <div class="toggle-row wpd-on">
+          <div>
+            <div class="toggle-label">Enable WPD</div>
+            <div class="toggle-sub">Upper arm detector</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="wpdToggle"><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <!-- Intensity (wave mode only) -->
+      <div class="ctrl-card" id="intensityCard" style="display:none;">
+        <h3>Wave controls</h3>
+        <div class="range-row">
+          <div class="range-hdr"><span>Amplitude</span><span class="range-val" id="ampValDisp">1.0</span></div>
+          <input type="range" id="ampSlider" min="0" max="10" value="10" step="1">
+        </div>
+        <canvas id="ampCanvas" height="50"></canvas>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Info panel -->
+  <div class="info-panel" id="infoPanel">
+    <div class="info-title photon" id="infoTitle">Single Photons — Single Beamsplitter</div>
+    <span id="infoText"></span>
+  </div>
+
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const S = {
+  entity: 'photon',   // photon | wave | particle
+  setup: 'bs',        // bs | mzi
+  phase: 0,           // degrees
+  wpd: false,
+  speed: 5,
+  amp: 1.0,
+  fired: 0, d1: 0, d2: 0,
+  photons: [],        // active animated photons
+  flashes: [],        // detector flash effects
+  waveT: 0,           // wave animation time
+  autoQ: 0,           // auto-fire queue
+  running: false,
+  raf: null
+};
+
+// ─── Canvas setup ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+let W, H, sf;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const cw = canvas.parentElement.clientWidth;
+  W = cw; H = 440;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+  sf = W / 680;
+}
+function px(v) { return v * sf; }
+
+// ─── Layout (in 680-unit space) ───────────────────────────────────────────────
+const L = {
+  src:  { x: 55,  y: 220 },
+  bs1:  { x: 165, y: 220 },
+  m1:   { x: 310, y: 85  },
+  m2:   { x: 310, y: 355 },
+  bs2:  { x: 455, y: 220 },
+  d1:   { x: 600, y: 85  },  // upper output
+  d2:   { x: 600, y: 355 },  // lower output
+  // BS-only layout
+  bsD1: { x: 380, y: 85  },  // upper (reflected)
+  bsD2: { x: 380, y: 355 },  // lower (transmitted? but we rotate layout)
+};
+
+// ─── Colors ───────────────────────────────────────────────────────────────────
+const C = {
+  photon:   '#4f9cf9',
+  photonG:  '#6fc3ff',
+  photonGhost: 'rgba(79,156,249,0.25)',
+  wave:     '#2dd4a8',
+  waveFade: 'rgba(45,212,168,0.15)',
+  particle: '#f5a623',
+  d1:       '#2dd4a8',
+  d2:       '#4f9cf9',
+  comp:     'rgba(255,255,255,0.06)',
+  compStroke:'rgba(255,255,255,0.2)',
+  guide:    'rgba(255,255,255,0.07)',
+  txt:      'rgba(255,255,255,0.5)',
+  txtBright:'rgba(255,255,255,0.75)',
+  bg:       '#161a24',
+};
+
+function entityColor() {
+  if(S.entity==='photon')   return C.photon;
+  if(S.entity==='wave')     return C.wave;
+  return C.particle;
+}
+
+// ─── Drawing helpers ──────────────────────────────────────────────────────────
+function drawBS(cx,cy,label) {
+  ctx.save();
+  ctx.translate(px(cx),px(cy));
+  ctx.rotate(Math.PI/4);
+  const r = px(18);
+  ctx.beginPath(); ctx.roundRect(-r,-r,r*2,r*2,px(3));
+  ctx.fillStyle=C.comp; ctx.fill();
+  ctx.strokeStyle=C.compStroke; ctx.lineWidth=px(1.2); ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.45)'; ctx.lineWidth=px(2);
+  ctx.beginPath(); ctx.moveTo(-px(12),px(12)); ctx.lineTo(px(12),-px(12)); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle=C.txtBright; ctx.font=`500 ${px(12)}px 'IBM Plex Sans',sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText(label, px(cx), px(cy)-px(27));
+  ctx.fillStyle=C.txt; ctx.font=`${px(10)}px 'IBM Plex Sans',sans-serif`;
+  ctx.fillText('50:50', px(cx), px(cy)-px(15));
+}
+
+function drawMirror(cx,cy,label) {
+  ctx.save();
+  ctx.translate(px(cx),px(cy));
+  ctx.rotate(Math.PI/4);
+  const r=px(13);
+  ctx.beginPath(); ctx.roundRect(-r,-r,r*2,r*2,px(3));
+  ctx.fillStyle=C.comp; ctx.fill();
+  ctx.strokeStyle=C.compStroke; ctx.lineWidth=px(1.2); ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=px(2.5);
+  ctx.beginPath(); ctx.moveTo(-px(9),px(9)); ctx.lineTo(px(9),-px(9)); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle=C.txtBright; ctx.font=`500 ${px(12)}px 'IBM Plex Sans',sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText(label, px(cx), px(cy)-px(22));
+}
+
+function drawDetector(cx,cy,label,count,col,active) {
+  const glow = active ? 0.5 : 0;
+  if(active) {
+    ctx.save();
+    const g = ctx.createRadialGradient(px(cx),px(cy),0,px(cx),px(cy),px(40));
+    g.addColorStop(0, col.replace(')',',0.4)').replace('rgb','rgba'));
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(px(cx),px(cy),px(40),0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.strokeStyle = col;
+  ctx.fillStyle = col.replace(')',',0.1)').replace('rgb','rgba');
+  // try a simple fill
+  ctx.fillStyle = active ? col.replace(')',',0.15)').replace('rgb','rgba') : 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = px(active?2:1.2);
+  ctx.beginPath(); ctx.roundRect(px(cx-26),px(cy-20),px(52),px(40),px(7));
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = col;
+  ctx.font = `600 ${px(13)}px 'IBM Plex Mono',monospace`;
+  ctx.textAlign='center';
+  ctx.fillText(label, px(cx), px(cy)-px(1));
+  ctx.font = `${px(10)}px 'IBM Plex Mono',monospace`;
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillText(count, px(cx), px(cy)+px(14));
+}
+
+function drawSource() {
+  const {x,y} = L.src;
+  const col = entityColor();
+  ctx.beginPath(); ctx.arc(px(x),px(y),px(14),0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,0.04)'; ctx.fill();
+  ctx.strokeStyle=col; ctx.lineWidth=px(1.5); ctx.stroke();
+  // inner circle
+  ctx.beginPath(); ctx.arc(px(x),px(y),px(6),0,Math.PI*2);
+  ctx.fillStyle=col+'88'; ctx.fill();
+  ctx.fillStyle=C.txt; ctx.font=`${px(11)}px 'IBM Plex Sans',sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText(S.entity==='wave'?'~src':S.entity==='particle'?'● src':'γ src', px(x), px(y)+px(26));
+}
+
+function drawGuideLine(pts, dash=true) {
+  ctx.save();
+  if(dash) ctx.setLineDash([px(5),px(8)]);
+  ctx.strokeStyle=C.guide; ctx.lineWidth=px(0.8);
+  ctx.beginPath();
+  pts.forEach((p,i)=> i===0 ? ctx.moveTo(px(p.x),px(p.y)) : ctx.lineTo(px(p.x),px(p.y)));
+  ctx.stroke(); ctx.restore();
+}
+
+function drawWPDLabel(x,y) {
+  ctx.fillStyle='rgba(245,166,35,0.12)';
+  ctx.strokeStyle='rgba(245,166,35,0.5)';
+  ctx.lineWidth=px(0.8);
+  ctx.beginPath(); ctx.roundRect(px(x-32),px(y-14),px(64),px(22),px(4));
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle='rgba(245,166,35,0.9)';
+  ctx.font=`500 ${px(10)}px 'IBM Plex Sans',sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('WPD active', px(x), px(y)+px(1));
+}
+
+// Phase shifter indicator on upper arm
+function drawPhaseShifter(x,y) {
+  if(S.entity==='photon'&&S.setup==='mzi') {
+    ctx.fillStyle='rgba(167,139,250,0.12)';
+    ctx.strokeStyle='rgba(167,139,250,0.5)';
+    ctx.lineWidth=px(0.8);
+    ctx.beginPath(); ctx.roundRect(px(x-22),px(y-14),px(44),px(22),px(4));
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgba(167,139,250,0.9)';
+    ctx.font=`500 ${px(10)}px 'IBM Plex Sans',sans-serif`;
+    ctx.textAlign='center';
+    ctx.fillText('Δφ='+S.phase+'°', px(x), px(y)+px(1));
+  }
+}
+
+// ─── Static scene drawing ─────────────────────────────────────────────────────
+function drawScene() {
+  ctx.clearRect(0,0,W,H);
+  // subtle grid
+  ctx.strokeStyle='rgba(255,255,255,0.02)'; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  if(S.setup==='bs') drawSceneBS();
+  else drawSceneMZI();
+}
+
+function drawSceneBS() {
+  // Guide lines: src→bs1, bs1→up, bs1→down
+  drawGuideLine([L.src, L.bs1]);
+  drawGuideLine([L.bs1, {x:L.bs1.x,y:L.bsD1.y}, L.bsD1]);
+  drawGuideLine([L.bs1, {x:L.bs1.x,y:L.bsD2.y}, L.bsD2]);
+  drawSource();
+  drawBS(L.bs1.x,L.bs1.y,'BS₁');
+  // Arm labels
+  ctx.fillStyle=C.txt; ctx.font=`${px(11)}px 'IBM Plex Sans',sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('reflected', px((L.bs1.x+L.bsD1.x)/2), px(L.bsD1.y)-px(12));
+  ctx.fillText('transmitted', px((L.bs1.x+L.bsD2.x)/2), px(L.bsD2.y)+px(22));
+  drawDetector(L.bsD1.x,L.bsD1.y,'D1',S.d1,C.d1, false);
+  drawDetector(L.bsD2.x,L.bsD2.y,'D2',S.d2,C.d2, false);
+}
+
+function drawSceneMZI() {
+  // Guide lines
+  drawGuideLine([L.src, L.bs1]);
+  drawGuideLine([L.bs1,{x:L.bs1.x,y:L.m1.y},L.m1,{x:L.bs2.x,y:L.m1.y},L.bs2]);
+  drawGuideLine([L.bs1,{x:L.bs1.x,y:L.m2.y},L.m2,{x:L.bs2.x,y:L.m2.y},L.bs2]);
+  drawGuideLine([L.bs2,{x:L.bs2.x,y:L.d1.y},L.d1]);
+  drawGuideLine([L.bs2,{x:L.bs2.x,y:L.d2.y},L.d2]);
+
+  // Phase shifter on upper arm
+  const psX = (L.m1.x+L.bs2.x)/2;
+  drawPhaseShifter(psX, L.m1.y);
+
+  // WPD on upper arm if active
+  if(S.entity==='photon'&&S.wpd) {
+    drawWPDLabel((L.bs1.x+L.m1.x)/2, L.m1.y-30);
+  }
+
+  drawSource();
+  drawBS(L.bs1.x,L.bs1.y,'BS₁');
+  drawMirror(L.m1.x,L.m1.y,'M₁');
+  drawMirror(L.m2.x,L.m2.y,'M₂');
+  drawBS(L.bs2.x,L.bs2.y,'BS₂');
+  drawDetector(L.d1.x,L.d1.y,'D1',S.d1,C.d1, false);
+  drawDetector(L.d2.x,L.d2.y,'D2',S.d2,C.d2, false);
+
+  // arm labels
+  ctx.fillStyle=C.txt; ctx.font=`${px(11)}px 'IBM Plex Sans',sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('upper arm', px((L.bs1.x+L.bs2.x)/2), px(L.m1.y)-px(30));
+  ctx.fillText('lower arm', px((L.bs1.x+L.bs2.x)/2), px(L.m2.y)+px(34));
+}
+
+// ─── Photon path builder ──────────────────────────────────────────────────────
+function buildPhotonPath() {
+  const phi = S.phase * Math.PI / 180;
+  let I1, I2;
+  if(S.setup==='bs') {
+    I1=0.5; I2=0.5;
+  } else {
+    if(S.entity==='photon'&&S.wpd) { I1=0.5; I2=0.5; }
+    else { I1=Math.cos(phi/2)**2; I2=Math.sin(phi/2)**2; }
+  }
+  const goD1 = Math.random() < I1;
+
+  let solid, ghostUpper=null, ghostLower=null;
+
+  if(S.setup==='bs') {
+    const bs=L.bs1, d1=L.bsD1, d2=L.bsD2;
+    if(goD1) solid=[L.src,bs,{x:bs.x,y:d1.y},d1];
+    else solid=[L.src,bs,{x:bs.x,y:d2.y},d2];
+    // No ghost arms for single BS
+  } else {
+    const showGhost = S.entity==='photon' && !S.wpd;
+    if(goD1) {
+      solid=[L.src,L.bs1,{x:L.bs2.x,y:L.bs2.y},{x:L.bs2.x,y:L.d1.y},L.d1];
+    } else {
+      solid=[L.src,L.bs1,{x:L.bs2.x,y:L.bs2.y},{x:L.bs2.x,y:L.d2.y},L.d2];
+    }
+    if(showGhost) {
+      ghostUpper=[L.bs1,{x:L.bs1.x,y:L.m1.y},L.m1,{x:L.bs2.x,y:L.m1.y},{x:L.bs2.x,y:L.bs2.y}];
+      ghostLower=[L.bs1,{x:L.bs1.x,y:L.m2.y},L.m2,{x:L.bs2.x,y:L.m2.y},{x:L.bs2.x,y:L.bs2.y}];
+    } else if(S.entity==='photon'&&S.wpd) {
+      // particle: one definite arm
+      const upper=Math.random()<0.5;
+      if(upper) {
+        solid=[L.src,L.bs1,{x:L.bs1.x,y:L.m1.y},L.m1,{x:L.bs2.x,y:L.m1.y},L.bs2,
+               ...(goD1?[{x:L.bs2.x,y:L.d1.y},L.d1]:[{x:L.bs2.x,y:L.d2.y},L.d2])];
+      } else {
+        solid=[L.src,L.bs1,{x:L.bs1.x,y:L.m2.y},L.m2,{x:L.bs2.x,y:L.m2.y},L.bs2,
+               ...(goD1?[{x:L.bs2.x,y:L.d1.y},L.d1]:[{x:L.bs2.x,y:L.d2.y},L.d2])];
+      }
+    } else {
+      // wave or particle MZI without WPD: show two arms explicitly
+      const upper=Math.random()<0.5;
+      if(upper) {
+        solid=[L.src,L.bs1,{x:L.bs1.x,y:L.m1.y},L.m1,{x:L.bs2.x,y:L.m1.y},L.bs2,
+               ...(goD1?[{x:L.bs2.x,y:L.d1.y},L.d1]:[{x:L.bs2.x,y:L.d2.y},L.d2])];
+      } else {
+        solid=[L.src,L.bs1,{x:L.bs1.x,y:L.m2.y},L.m2,{x:L.bs2.x,y:L.m2.y},L.bs2,
+               ...(goD1?[{x:L.bs2.x,y:L.d1.y},L.d1]:[{x:L.bs2.x,y:L.d2.y},L.d2])];
+      }
+    }
+  }
+  return {solid, ghostUpper, ghostLower, goD1, progress:0, prevPos:null};
+}
+
+// Path utils
+function pathLen(pts){let l=0;for(let i=1;i<pts.length;i++)l+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);return l;}
+function interpPt(pts,t){
+  const total=pathLen(pts); let tgt=t*total,acc=0;
+  for(let i=1;i<pts.length;i++){
+    const seg=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);
+    if(acc+seg>=tgt){const f=(tgt-acc)/seg;return{x:pts[i-1].x+f*(pts[i].x-pts[i-1].x),y:pts[i-1].y+f*(pts[i].y-pts[i-1].y)};}
+    acc+=seg;
+  }
+  return pts[pts.length-1];
+}
+
+// ─── Wave drawing ─────────────────────────────────────────────────────────────
+function drawWaveScene(t) {
+  drawScene();
+  const phi = S.phase * Math.PI / 180;
+  const amp = S.amp;
+  const col = C.wave;
+
+  function wavePath(pts, phase_offset=0, alpha=1) {
+    const total=pathLen(pts);
+    const nPts=Math.round(total*3);
+    ctx.save();
+    ctx.strokeStyle=col;
+    ctx.globalAlpha=alpha*amp;
+    ctx.lineWidth=px(2);
+    // Clip to path bounding region
+    ctx.beginPath();
+    let first=true;
+    for(let i=0;i<=nPts;i++){
+      const frac=i/nPts;
+      const pos=interpPt(pts,frac);
+      const wave=Math.sin(frac*total*0.18 - t*3 + phase_offset)*px(5)*amp;
+      // perpendicular direction
+      const dx=i<nPts?(interpPt(pts,(i+1)/nPts).x-pos.x):0;
+      const dy=i<nPts?(interpPt(pts,(i+1)/nPts).y-pos.y):0;
+      const len=Math.hypot(dx,dy)||1;
+      const nx=-dy/len, ny=dx/len;
+      const wx=px(pos.x)+nx*wave, wy=px(pos.y)+ny*wave;
+      first ? ctx.moveTo(wx,wy) : ctx.lineTo(wx,wy);
+      first=false;
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Intensity fills at detectors
+  let I1,I2;
+  if(S.setup==='bs'){ I1=0.5; I2=0.5; }
+  else { I1=Math.cos(phi/2)**2; I2=Math.sin(phi/2)**2; }
+
+  if(S.setup==='bs') {
+    wavePath([L.src,L.bs1]);
+    wavePath([L.bs1,{x:L.bs1.x,y:L.bsD1.y},L.bsD1],0,0.7);
+    wavePath([L.bs1,{x:L.bs1.x,y:L.bsD2.y},L.bsD2],Math.PI,0.7);
+    // detector glow proportional to intensity
+    drawDetectorGlow(L.bsD1.x,L.bsD1.y,0.5,C.d1);
+    drawDetectorGlow(L.bsD2.x,L.bsD2.y,0.5,C.d2);
+  } else {
+    wavePath([L.src,L.bs1]);
+    wavePath([L.bs1,{x:L.bs1.x,y:L.m1.y},L.m1,{x:L.bs2.x,y:L.m1.y},L.bs2],0,0.6);
+    wavePath([L.bs1,{x:L.bs1.x,y:L.m2.y},L.m2,{x:L.bs2.x,y:L.m2.y},L.bs2],phi,0.6);
+    wavePath([L.bs2,{x:L.bs2.x,y:L.d1.y},L.d1],0,I1);
+    wavePath([L.bs2,{x:L.bs2.x,y:L.d2.y},L.d2],0,I2);
+    drawDetectorGlow(L.d1.x,L.d1.y,I1,C.d1);
+    drawDetectorGlow(L.d2.x,L.d2.y,I2,C.d2);
+    // redraw detectors with correct glow
+    drawDetector(L.d1.x,L.d1.y,'D1',S.d1,C.d1,I1>0.1);
+    drawDetector(L.d2.x,L.d2.y,'D2',S.d2,C.d2,I2>0.1);
+  }
+  updateWaveAmplitudeViz(amp,I1,I2);
+}
+
+function drawDetectorGlow(cx,cy,intensity,col) {
+  if(intensity<0.01) return;
+  ctx.save();
+  const g=ctx.createRadialGradient(px(cx),px(cy),0,px(cx),px(cy),px(50));
+  const rgb = col==='#2dd4a8'?'45,212,168':'79,156,249';
+  g.addColorStop(0,`rgba(${rgb},${0.5*intensity})`);
+  g.addColorStop(1,`rgba(${rgb},0)`);
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.arc(px(cx),px(cy),px(50),0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+// ─── Particle drawing ─────────────────────────────────────────────────────────
+function buildParticlePath() {
+  // Classical particle: goes one way with 50% each (no interference)
+  const goD1 = Math.random()<0.5;
+  let solid;
+  if(S.setup==='bs') {
+    const bs=L.bs1;
+    if(goD1) solid=[L.src,bs,{x:bs.x,y:L.bsD1.y},L.bsD1];
+    else solid=[L.src,bs,{x:bs.x,y:L.bsD2.y},L.bsD2];
+  } else {
+    const upper=goD1; // particles go upper→D1, lower→D2 in classical case
+    if(upper) solid=[L.src,L.bs1,{x:L.bs1.x,y:L.m1.y},L.m1,{x:L.bs2.x,y:L.m1.y},L.bs2,{x:L.bs2.x,y:L.d1.y},L.d1];
+    else solid=[L.src,L.bs1,{x:L.bs1.x,y:L.m2.y},L.m2,{x:L.bs2.x,y:L.m2.y},L.bs2,{x:L.bs2.x,y:L.d2.y},L.d2];
+  }
+  return {solid, ghostUpper:null, ghostLower:null, goD1, progress:0, prevPos:null};
+}
+
+// ─── Animation loop ───────────────────────────────────────────────────────────
+let lastTs=null;
+let waveOffset=0;
+
+function frame(ts) {
+  S.raf=null;
+  if(!lastTs) lastTs=ts;
+  const dt=(ts-lastTs)/1000; lastTs=ts;
+  const spd=S.speed/5*0.55;
+  S.waveT+=dt;
+
+  if(S.entity==='wave') {
+    drawWaveScene(S.waveT);
+    S.raf=requestAnimationFrame(frame);
+    return;
+  }
+
+  drawScene();
+
+  // Draw flashes
+  S.flashes=S.flashes.filter(f=>{
+    f.age++; const a=Math.max(0,1-f.age/20);
+    if(a<=0) return false;
+    ctx.save(); ctx.globalAlpha=a;
+    const r=S.setup==='bs'?(f.d1?L.bsD1:L.bsD2):(f.d1?L.d1:L.d2);
+    ctx.beginPath(); ctx.arc(px(r.x),px(r.y),px(20+f.age*1.5),0,Math.PI*2);
+    ctx.strokeStyle=f.d1?C.d1:C.d2; ctx.lineWidth=px(1.5); ctx.stroke();
+    ctx.restore();
+    return true;
+  });
+
+  // Animate photons/particles
+  S.photons=S.photons.filter(ph=>{
+    ph.progress+=dt*spd;
+    if(ph.progress>=1){
+      if(ph.goD1){S.d1++;S.flashes.push({d1:true,age:0});}
+      else{S.d2++;S.flashes.push({d1:false,age:0});}
+      S.fired++; updateStats(); return false;
+    }
+    const col=entityColor();
+    // Ghost arms for quantum superposition
+    if(ph.ghostUpper&&ph.progress>0.15&&ph.progress<0.85){
+      const ga=0.25*Math.min(1,(ph.progress-0.15)/0.1)*Math.max(0,1-(ph.progress-0.75)/0.1);
+      ctx.save(); ctx.globalAlpha=ga;
+      ctx.strokeStyle='#a78bfa'; ctx.lineWidth=px(1.5);
+      ctx.setLineDash([px(3),px(5)]);
+      [[ph.ghostUpper],[ph.ghostLower]].forEach(([arm])=>{
+        ctx.beginPath();
+        arm.forEach((p,i)=>i===0?ctx.moveTo(px(p.x),px(p.y)):ctx.lineTo(px(p.x),px(p.y)));
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+    // Core particle
+    const pos=interpPt(ph.solid,ph.progress);
+    // Glow
+    ctx.save();
+    const g=ctx.createRadialGradient(px(pos.x),px(pos.y),0,px(pos.x),px(pos.y),px(16));
+    g.addColorStop(0,col+'cc'); g.addColorStop(1,col+'00');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px(pos.x),px(pos.y),px(16),0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    // Trail
+    if(ph.prevPos){
+      ctx.beginPath(); ctx.moveTo(px(ph.prevPos.x),px(ph.prevPos.y));
+      ctx.lineTo(px(pos.x),px(pos.y));
+      ctx.strokeStyle=col+'99'; ctx.lineWidth=px(2.5); ctx.stroke();
+    }
+    // Core dot
+    ctx.beginPath(); ctx.arc(px(pos.x),px(pos.y),px(4.5),0,Math.PI*2);
+    ctx.fillStyle=S.entity==='photon'?'#fff':col; ctx.fill();
+    ph.prevPos={...pos};
+    return true;
+  });
+
+  if(S.photons.length>0||S.flashes.length>0){
+    S.raf=requestAnimationFrame(frame);
+  } else {
+    lastTs=null;
+    drawScene();
+    updateStats();
+    // Continue auto-fire
+    if(S.autoQ>0){
+      S.autoQ--;
+      setTimeout(fireOne,20);
+    } else {
+      S.running=false;
+      setDisabled(false);
+    }
+  }
+}
+
+function fireOne(){
+  if(S.entity==='particle') S.photons.push(buildParticlePath());
+  else S.photons.push(buildPhotonPath());
+  if(!S.raf){ lastTs=null; S.raf=requestAnimationFrame(frame); }
+}
+
+function fireBulk(n){
+  // instant — no animation
+  const phi=S.phase*Math.PI/180;
+  for(let i=0;i<n;i++){
+    let goD1;
+    if(S.entity==='particle'){ goD1=Math.random()<0.5; }
+    else if(S.setup==='bs'){ goD1=Math.random()<0.5; }
+    else if(S.wpd){ goD1=Math.random()<0.5; }
+    else { goD1=Math.random()<Math.cos(phi/2)**2; }
+    if(goD1)S.d1++;else S.d2++;
+    S.fired++;
+  }
+  updateStats(); drawScene(); setDisabled(false);
+}
+
+function setDisabled(d){
+  ['btn1','btn50','btn500'].forEach(id=>document.getElementById(id).disabled=d);
+}
+
+// ─── Stats update ─────────────────────────────────────────────────────────────
+function updateStats(){
+  document.getElementById('firedVal').textContent=S.fired;
+  document.getElementById('d1Val').textContent=S.d1;
+  document.getElementById('d2Val').textContent=S.d2;
+  const n=S.fired;
+  const p1=n?Math.round(S.d1/n*100):0;
+  const p2=n?Math.round(S.d2/n*100):0;
+  document.getElementById('d1Pct').textContent=n?(p1+'%'):'—';
+  document.getElementById('d2Pct').textContent=n?(p2+'%'):'—';
+  document.getElementById('d1Bar').style.width=p1+'%';
+  document.getElementById('d2Bar').style.width=p2+'%';
+  document.getElementById('d1BarPct').textContent=p1+'%';
+  document.getElementById('d2BarPct').textContent=p2+'%';
+
+  // Theory
+  const phi=S.phase*Math.PI/180;
+  let t1,t2;
+  if(S.entity==='particle'||S.setup==='bs'||S.wpd){t1=50;t2=50;}
+  else{t1=Math.round(Math.cos(phi/2)**2*100);t2=100-t1;}
+  const tr=document.getElementById('theoryRow');
+  tr.textContent=`theory: D1=${t1}% D2=${t2}%`;
+}
+
+// ─── Wave amplitude canvas ────────────────────────────────────────────────────
+function updateWaveAmplitudeViz(amp,I1,I2){
+  const c=document.getElementById('ampCanvas');
+  if(!c) return;
+  const dc=c.getContext('2d');
+  const cw=c.width=c.offsetWidth*window.devicePixelRatio||200;
+  const ch=c.height=50*window.devicePixelRatio;
+  c.style.height='50px';
+  dc.scale(window.devicePixelRatio,1);
+  const w=c.offsetWidth, h=50;
+  dc.clearRect(0,0,w,h);
+  // show two bars for I1 and I2
+  dc.fillStyle='rgba(45,212,168,0.8)';
+  dc.fillRect(0,h-I1*h*0.9,w/2-2,I1*h*0.9);
+  dc.fillStyle='rgba(79,156,249,0.8)';
+  dc.fillRect(w/2+2,h-I2*h*0.9,w/2-2,I2*h*0.9);
+  dc.fillStyle='rgba(255,255,255,0.4)';
+  dc.font=`10px 'IBM Plex Mono',monospace`;
+  dc.textAlign='center';
+  dc.fillText('D1',w/4,h-2);
+  dc.fillText('D2',3*w/4,h-2);
+}
+
+// ─── Info panel text ──────────────────────────────────────────────────────────
+const INFO = {
+  photon_bs: ['photon','Single Photons — Single Beamsplitter',
+    `At the beamsplitter, a single photon enters in a <em>superposition of both output paths</em>. It is neither reflected nor transmitted — it is both simultaneously, described by the quantum state <em>|ψ⟩ = (1/√2)(|↑⟩ + |↓⟩)</em>. When detected, it collapses to one definite outcome: D1 or D2 each with <em>50% probability</em>. Fire many photons to see this build up statistically.`],
+  photon_mzi_nowpd: ['photon','Single Photons — MZI (no WPD)',
+    `Without the which-path detector, the photon travels <em>both arms simultaneously</em> as a quantum superposition (shown as ghost beams). At BS₂ it <em>interferes with itself</em>. The detection probabilities are: <em>P(D1) = cos²(Δφ/2)</em> and <em>P(D2) = sin²(Δφ/2)</em>. At Δφ=0°, only D1 clicks. Try sweeping the phase to shift intensity between detectors.`],
+  photon_mzi_wpd: ['photon','Single Photons — MZI (WPD ON)',
+    `The which-path detector observes which arm the photon takes, <em>collapsing the superposition</em>. The photon now behaves as a <em>classical particle</em> — it takes exactly one arm. Interference is destroyed: D1 and D2 each get <em>50% regardless of phase</em>. This is the quantum measurement paradox: observation changes the outcome.`],
+  wave_bs: ['wave','EM Wave — Single Beamsplitter',
+    `A classical electromagnetic wave is split 50:50 by the beamsplitter. <em>Both output beams exist simultaneously</em> with equal amplitude. The wave divides continuously — unlike a photon which collapses to one port. The intensity at each detector is <em>I₀/2</em> at all times.`],
+  wave_mzi: ['wave','EM Wave — Full MZI',
+    `The wave travels both arms simultaneously and recombines at BS₂. <em>Constructive and destructive interference</em> determines output intensities: <em>I₁ = I₀ cos²(Δφ/2)</em>, <em>I₂ = I₀ sin²(Δφ/2)</em>. Sweep the phase to see intensity shift continuously between detectors. The wave picture predicts <em>continuous, deterministic intensities</em> — unlike the probabilistic photon clicks.`],
+  particle_bs: ['particle','Classical Particles — Single Beamsplitter',
+    `A classical particle hits the beamsplitter and goes <em>one way or the other</em> — never both. It is reflected or transmitted with 50% probability each, but at any instant it takes a definite single path. Over many particles you see <em>50:50 statistics</em> — same as a single photon, but for completely different reasons.`],
+  particle_mzi: ['particle','Classical Particles — Full MZI',
+    `A classical particle takes <em>one definite arm</em> through the MZI. Without path superposition, there is <em>no interference</em>. Changing the phase has no effect — D1 and D2 always each receive 50%. This directly contrasts with the quantum photon case where phase controls detection probability completely.`],
+};
+
+function getInfoKey(){
+  if(S.entity==='wave') return S.setup==='bs'?'wave_bs':'wave_mzi';
+  if(S.entity==='particle') return S.setup==='bs'?'particle_bs':'particle_mzi';
+  if(S.setup==='bs') return 'photon_bs';
+  return S.wpd?'photon_mzi_wpd':'photon_mzi_nowpd';
+}
+
+function updateInfo(){
+  const key=getInfoKey();
+  const [cls,title,text]=INFO[key];
+  document.getElementById('infoTitle').className='info-title '+cls;
+  document.getElementById('infoTitle').textContent=title;
+  document.getElementById('infoText').innerHTML=text;
+}
+
+// ─── UI wiring ────────────────────────────────────────────────────────────────
+// Entity tabs
+document.getElementById('entityTabs').addEventListener('click',e=>{
+  const t=e.target.closest('[data-entity]'); if(!t) return;
+  document.querySelectorAll('#entityTabs .tab').forEach(b=>b.classList.remove('active'));
+  t.classList.add('active');
+  S.entity=t.dataset.entity;
+  resetCounts();
+  updateControlVisibility();
+  updateInfo();
+  drawScene();
+  if(S.entity==='wave') { S.raf=requestAnimationFrame(frame); }
+  else if(S.raf){cancelAnimationFrame(S.raf);S.raf=null;}
+});
+
+// Setup tabs
+document.getElementById('setupTabs').addEventListener('click',e=>{
+  const t=e.target.closest('[data-setup]'); if(!t) return;
+  document.querySelectorAll('#setupTabs .tab').forEach(b=>b.classList.remove('active'));
+  t.classList.add('active');
+  S.setup=t.dataset.setup;
+  resetCounts();
+  updateControlVisibility();
+  updateInfo();
+  drawScene();
+});
+
+function updateControlVisibility(){
+  const isMZI=S.setup==='mzi';
+  const isPhoton=S.entity==='photon';
+  const isWave=S.entity==='wave';
+  document.getElementById('phaseCard').style.display=(isMZI&&!isWave)?'block':isWave&&isMZI?'block':'none';
+  if(isWave&&isMZI) document.getElementById('phaseCard').style.display='block';
+  else if(isWave) document.getElementById('phaseCard').style.display='none';
+  else document.getElementById('phaseCard').style.display=isMZI?'block':'none';
+  document.getElementById('wpdCard').style.display=(isPhoton&&isMZI)?'block':'none';
+  document.getElementById('intensityCard').style.display=isWave?'block':'none';
+  // fire buttons label
+  const lbl = isWave?'Animate':'Send 1';
+  document.getElementById('btn1').textContent=isWave?'Animate wave':'Send 1';
+}
+
+document.getElementById('btn1').addEventListener('click',()=>{
+  if(S.entity==='wave'){
+    if(!S.raf){S.raf=requestAnimationFrame(frame);}
+    return;
+  }
+  setDisabled(true); S.running=true;
+  fireOne();
+});
+
+document.getElementById('btn50').addEventListener('click',()=>{
+  if(S.entity==='wave') return;
+  setDisabled(true); S.running=true;
+  S.autoQ=49; fireOne();
+});
+
+document.getElementById('btn500').addEventListener('click',()=>{
+  if(S.entity==='wave') return;
+  setDisabled(true); fireBulk(500);
+});
+
+document.getElementById('btnReset').addEventListener('click',()=>{
+  resetCounts();
+});
+
+function resetCounts(){
+  S.fired=0;S.d1=0;S.d2=0;
+  S.photons=[];S.flashes=[];S.autoQ=0;S.running=false;
+  setDisabled(false);
+  updateStats(); drawScene();
+}
+
+document.getElementById('phaseSlider').addEventListener('input',function(){
+  S.phase=+this.value;
+  document.getElementById('phaseValDisp').textContent=this.value+'°';
+  updateStats(); updateInfo();
+  if(S.entity==='wave') {} else drawScene();
+});
+
+document.getElementById('speedSlider').addEventListener('input',function(){
+  S.speed=+this.value;
+  document.getElementById('speedVal').textContent=this.value;
+});
+
+document.getElementById('wpdToggle').addEventListener('change',function(){
+  S.wpd=this.checked;
+  const badge=document.getElementById('wpdBadge');
+  badge.textContent=S.wpd?'ON':'OFF';
+  badge.className='badge '+(S.wpd?'on':'off');
+  updateStats(); updateInfo(); drawScene();
+});
+
+document.getElementById('ampSlider').addEventListener('input',function(){
+  S.amp=+this.value/10;
+  document.getElementById('ampValDisp').textContent=(S.amp).toFixed(1);
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('resize',()=>{resize();drawScene();});
+resize();
+updateControlVisibility();
+updateInfo();
+updateStats();
+drawScene();
+</script>
+</body>
+</html>

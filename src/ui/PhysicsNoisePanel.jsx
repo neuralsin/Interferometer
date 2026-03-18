@@ -110,7 +110,7 @@ const PhysicsNoisePanel = () => {
   }, [state.laserLinewidth, state.phaseNoiseEnabled]);
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ flex: 1, overflowY: 'auto', maxHeight: 'calc(100vh - 120px)', padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -147,7 +147,7 @@ const PhysicsNoisePanel = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 32 }}>
             <h2 className="label-section">Wave Optics</h2>
             <span style={{ fontSize: 8, border: '1px solid rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 'var(--radius-full)', color: 'var(--text-mercury)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
-              Propagation_Active
+              w₀={((state.beamWaist * 1e6)).toFixed(1)}μm
             </span>
           </div>
 
@@ -331,13 +331,11 @@ const PhysicsNoisePanel = () => {
       {/* Footer Activity Feed */}
       <div style={{ paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 32, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.15em' }}>
-          <StatusDot label="ENGINE: COMPUTING" opacity={0.4} />
+          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.35)' }}>▪ PHYSICS_ENGINE</span>
           <span>OPD: {(2 * (Math.sqrt(state.mirror1PosX**2 + state.mirror1PosZ**2) - Math.sqrt(state.mirror2PosX**2 + state.mirror2PosZ**2)) * 1e9).toFixed(1)} nm</span>
-          <span>KERNEL: v18.4.3-STOCHASTIC</span>
+          <span>λ: {(state.wavelength * 1e9).toFixed(1)}nm</span>
+          <span>Lc: {(299792458 / state.laserLinewidth).toFixed(2)}m</span>
         </div>
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.15em' }}>
-          CID: 0x2A88F4...119D
-        </span>
       </div>
     </div>
   );

@@ -327,8 +327,8 @@ const App = () => {
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: simulationPaused ? 'rgba(255,200,0,0.6)' : 'rgba(100,255,100,0.6)' }} />
             Engine: {simulationPaused ? 'Paused' : 'Computing'}
           </span>
-          <span>Kernel: v18.4.3-Stochastic</span>
-          <span>GPU_Accel: True</span>
+          <span>Mode: {isResearchMode ? 'Research' : 'Beginner'}</span>
+          <span>Panels: {isResearchMode ? 4 : 2}</span>
         </div>
         <a href="https://github.com/neuralsin" target="_blank" rel="noopener noreferrer"
           style={{ color: 'rgba(255,255,255,0.15)', textDecoration: 'none', fontSize: 8, letterSpacing: '0.2em' }}>
