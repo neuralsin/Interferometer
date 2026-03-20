@@ -109,7 +109,8 @@ export default function SagnacScene() {
       const st = useSimulationStore.getState();
       if (st.simulationPaused) return;
 
-      const W = container.clientWidth, H = container.clientHeight;
+      const W = Math.floor(container.clientWidth);
+      const H = Math.floor(container.clientHeight);
       if (W < 10 || H < 10) return;
       if (canvas.width !== W || canvas.height !== H) { canvas.width=W; canvas.height=H; }
 
@@ -117,12 +118,17 @@ export default function SagnacScene() {
       const waveT = waveTRef.current;
 
       // Slow sinusoidal Omega animation — period ≈ 120s
+      let currentOmega = st.sagnacOmega;
       if (animRef.current) {
-        const newOmega = Math.sin(waveT * 0.052) * 2;
-        st.setParam('sagnacOmega', parseFloat(newOmega.toFixed(4)));
+        currentOmega = Math.sin(waveT * 0.052) * 2;
+        // Throttle global React state updates to 5Hz (every 200ms) to prevent UI lag
+        if (!window.sagnacLastOmegaTs || (ts - window.sagnacLastOmegaTs > 200)) {
+          window.sagnacLastOmegaTs = ts;
+          st.setParam('sagnacOmega', parseFloat(currentOmega.toFixed(4)));
+        }
       }
 
-      const omega = st.sagnacOmega;
+      const omega = currentOmega;
       const sg = computeSagnac({
         loopLength: st.sagnacLoopLength,
         loopRadius: st.sagnacLoopRadius,
@@ -164,9 +170,10 @@ export default function SagnacScene() {
       const M3 = vtx(72);    // lower-right
 
       // Pentagon perimeter
-      const pentagon = [BS, M2, M1, M4, M3, BS]; // CW order
-      const cwPath  = [BS, M2, M1, M4, M3, BS];
-      const ccwPath = [BS, M3, M4, M1, M2, BS];
+      const pentagon = [BS, M2, M1, M4, M3, BS];
+      // Fix CW/CCW path directions (screen Y-down: CCW array = clockwise visually)
+      const cwPath  = [BS, M3, M4, M1, M2, BS];  // CW (blue): BS→M3→M4→M1→M2→BS
+      const ccwPath = [BS, M2, M1, M4, M3, BS];  // CCW (red): BS→M2→M1→M4→M3→BS
 
       // ── Disk circle ──
       ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2.5;
@@ -268,12 +275,12 @@ export default function SagnacScene() {
       ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '7px sans-serif';
       ctx.fillText('Half-silvered', BS.x+20, BS.y-3);
 
-      // ── External source (below-right, outside circle) ──
-      const srcX = BS.x + 60, srcY = BS.y + 50;
-      // source → BS (dashed entry)
+      // ── External source (right side, horizontal with BS — aligned for straight transmission) ──
+      const srcX = BS.x + 65, srcY = BS.y;
+      // source → BS (dashed entry, straight horizontal)
       ctx.strokeStyle = `rgba(${lr},${lg},${lb},${0.5*pf})`;
       ctx.lineWidth = 1.5; ctx.setLineDash([5,4]);
-      ctx.beginPath(); ctx.moveTo(srcX, srcY); ctx.lineTo(BS.x+4, BS.y+4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(srcX, srcY); ctx.lineTo(BS.x+4, BS.y); ctx.stroke();
       ctx.setLineDash([]);
       // Source circle
       ctx.fillStyle = 'rgba(20,40,70,0.75)';
@@ -288,7 +295,7 @@ export default function SagnacScene() {
       ctx.fillText(`${lamNm.toFixed(0)} nm`, srcX, srcY+35);
 
       // ── Detector (external, right side) ──
-      const detX = diskCX + diskR + 72, detY = BS.y;
+      const detX = srcX, detY = BS.y - 50;
       const sI = sg.intensity, sIsC = sg.isConstructive;
       const [dR, dG, dB] = sIsC ? [255,220,60] : [57,255,20];
 

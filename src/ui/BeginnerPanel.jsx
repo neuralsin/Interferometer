@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
+import { computeOPD } from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor } from '../physics/basicInterference.js';
 
 /** Reusable V3-styled slider row with optional formula tooltip */
@@ -33,17 +34,15 @@ export const SliderControl = ({ label, unit, value, min, max, step, onChange, fo
  */
 const BeginnerPanel = () => {
   const wavelength = useSimulationStore((s) => s.wavelength);
-  const mirror1PosX = useSimulationStore((s) => s.mirror1PosX);
-  const mirror2PosZ = useSimulationStore((s) => s.mirror2PosZ);
   const mirror1Tip = useSimulationStore((s) => s.mirror1Tip);
   const mirror2Tip = useSimulationStore((s) => s.mirror2Tip);
   const laserLinewidth = useSimulationStore((s) => s.laserLinewidth);
   const interferometerType = useSimulationStore((s) => s.interferometerType);
   const canvasRef = useRef(null);
 
-  const armX = Math.sqrt(mirror1PosX ** 2);
-  const armY = Math.abs(mirror2PosZ);
-  const opd = 2 * (armX - armY);
+  // Use central OPD engine for topology-aware calculation
+  const state = useSimulationStore();
+  const { opd, tiltFactor } = computeOPD(state);
 
   // Render real fringe pattern from physics engine
   useEffect(() => {
@@ -69,6 +68,7 @@ const BeginnerPanel = () => {
         opdCenter: opd,
         tiltX: mirror1Tip,
         tiltY: mirror2Tip,
+        tiltFactor,
         resolution,
         detectorSize: 0.01,
         linewidth: laserLinewidth,

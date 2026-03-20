@@ -8,9 +8,8 @@ import PhysicsNoisePanel from './ui/PhysicsNoisePanel.jsx';
 import QuantumPanel from './ui/QuantumPanel.jsx';
 import AnalyticsPanel from './ui/AnalyticsPanel.jsx';
 import useSimulationStore from './store/simulationStore.js';
+import { computeOPD, computeTiltAveragedProbability } from './store/simulationStore.js';
 import { exportCSV, exportJSON } from './physics/dataExport.js';
-import { detectionProbabilities } from './physics/basicInterference.js';
-import { fringeVisibility } from './physics/coherenceModel.js';
 
 const TABS = [
   { id: 'sim', label: 'SIMULATION' },
@@ -38,37 +37,40 @@ const DetectionOverlay = ({ isResearch }) => {
   const state = useSimulationStore();
   const iType = state.interferometerType;
 
-  // === MZI calculations (drag-only OPD, no Michelson tip) ===
-  const compensatorOPD = state.compensatorEnabled
-    ? ((state.compensatorRefractiveIndex || 1.5168) - 1) * (state.compensatorThickness || 0.00635) : 0;
-  const opd = -compensatorOPD; // MZI default arms are equal; only compensator shifts OPD
-  const { p1, p2 } = detectionProbabilities(state.wavelength, opd);
-  const vis = fringeVisibility(opd, state.laserLinewidth);
+  // Central physics engine — topology-aware
+  const opdResult = computeOPD(state);
+  const { p1, p2, visibility } = computeTiltAveragedProbability(state);
   const n1 = state.simD1, n2 = state.simD2, total = state.simFired;
 
-  // === Michelson calculations ===
+  // === Michelson-specific derived values ===
   const GAS = { air: { n0: 293e-6 }, he: { n0: 35e-6 }, ar: { n0: 281e-6 } };
   const gasN = 1 + (GAS[state.gasCellGas]?.n0 || 293e-6) * state.gasCellPressure;
   const mGasOPD = 2 * (gasN - 1) * state.gasCellLength;
-  const mMirOPD = 2 * state.mirrorDisplacement * 1e-6;
-  const mTotalOPD = mGasOPD + mMirOPD;
-  const mPhase = (2 * Math.PI / state.wavelength) * mTotalOPD;
-  const mPhaseMod = ((mPhase % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-  const mCosVal = (Math.cos(mPhaseMod) + 1) / 2;
-  const mFringes = mTotalOPD / state.wavelength;
-  const mRegime = state.mirrorTilt < 0.05 ? 'Circular' : state.mirrorTilt < 0.5 ? 'Curved' : state.mirrorTilt < 2 ? 'Straight' : 'Dense';
-  const mP1 = mCosVal, mP2 = 1 - mCosVal;
+  const mMirOPD = 2 * (state.mirrorDisplacement || 0) * 1e-6;
+  const mFringes = opdResult.opd / state.wavelength;
+  const mRegime = (state.mirrorTilt || 0) < 0.05 ? 'Circular' : (state.mirrorTilt || 0) < 0.5 ? 'Curved' : (state.mirrorTilt || 0) < 2 ? 'Straight' : 'Dense';
 
-  // === Sagnac calculations ===
+  // === Sagnac-specific ===
   const sArea = state.sagnacNumLoops * Math.PI * state.sagnacLoopRadius ** 2;
   const c = 299792458;
   const sDt = (4 * sArea * Math.abs(state.sagnacOmega)) / (c * c);
   const sDFringe = (4 * sArea * Math.abs(state.sagnacOmega)) / (c * state.wavelength);
-  const sPhase = 2 * Math.PI * sDFringe;
-  const sCosVal = (Math.cos(sPhase) + 1) / 2;
   const v = Math.abs(state.sagnacOmega) * state.sagnacLoopRadius;
   const sCW = c - v, sCCW = c + v;
-  const sP1 = sCosVal, sP2 = 1 - sCosVal;
+
+  // Empirical ratio bar (shared)
+  const empBar = total > 0 && (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 2 }}>
+        <div style={{ flex: Math.max(1, n1), height: 4, background: '#2dd4a8', borderRadius: 2 }} />
+        <div style={{ flex: Math.max(1, n2), height: 4, background: '#4f9cf9', borderRadius: 2 }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 7, opacity: 0.5 }}>
+        <span>D₁: {n1} ({(n1/total*100).toFixed(1)}%)</span>
+        <span>D₂: {n2} ({(n2/total*100).toFixed(1)}%)</span>
+      </div>
+    </div>
+  );
 
   if (iType === 'michelson') {
     return (
@@ -77,15 +79,15 @@ const DetectionOverlay = ({ isResearch }) => {
         <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', display: 'flex', flexDirection: 'column', gap: 3 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gas OPD:</span><span style={{ color: '#fff' }}>{(mGasOPD * 1e9).toFixed(2)} nm</span></div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Mirror OPD:</span><span style={{ color: '#fff' }}>{(mMirOPD * 1e9).toFixed(1)} nm</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Total OPD:</span><span style={{ color: '#fff' }}>{(mTotalOPD * 1e9).toFixed(1)} nm</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Total OPD:</span><span style={{ color: '#fff' }}>{(opdResult.opd * 1e9).toFixed(1)} nm</span></div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Fringes:</span><span style={{ color: '#fff' }}>{mFringes.toFixed(3)}</span></div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>n(gas):</span><span style={{ color: '#fff' }}>{gasN.toFixed(6)}</span></div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Regime:</span><span style={{ color: '#fff' }}>{mRegime}</span></div>
         </div>
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 9, fontFamily: 'var(--font-mono)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(constr):</span><span style={{ color: '#2dd4a8' }}>{(mP1 * 100).toFixed(1)}%</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(destr):</span><span style={{ color: '#f5a623' }}>{(mP2 * 100).toFixed(1)}%</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Visibility:</span><span style={{ color: '#fff' }}>{(vis * 100).toFixed(1)}%</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(constr):</span><span style={{ color: '#2dd4a8' }}>{(p1 * 100).toFixed(1)}%</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(destr):</span><span style={{ color: '#f5a623' }}>{(p2 * 100).toFixed(1)}%</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Visibility:</span><span style={{ color: '#fff' }}>{(visibility * 100).toFixed(1)}%</span></div>
         </div>
       </div>
     );
@@ -105,9 +107,9 @@ const DetectionOverlay = ({ isResearch }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Ω:</span><span style={{ color: '#fff' }}>{state.sagnacOmega.toFixed(3)} rad/s</span></div>
         </div>
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 9, fontFamily: 'var(--font-mono)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(constr):</span><span style={{ color: '#2dd4a8' }}>{(sP1 * 100).toFixed(1)}%</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(destr):</span><span style={{ color: '#f5a623' }}>{(sP2 * 100).toFixed(1)}%</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Phase:</span><span style={{ color: '#fff' }}>{(sPhase / (2 * Math.PI)).toFixed(4)}λ</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(constr):</span><span style={{ color: '#2dd4a8' }}>{(p1 * 100).toFixed(1)}%</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(destr):</span><span style={{ color: '#f5a623' }}>{(p2 * 100).toFixed(1)}%</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Phase:</span><span style={{ color: '#fff' }}>{((opdResult.sagnacPhase || 0) / (2 * Math.PI)).toFixed(4)}λ</span></div>
         </div>
       </div>
     );
@@ -126,33 +128,50 @@ const DetectionOverlay = ({ isResearch }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: 4, paddingTop: 4 }}>
         <span>Total:</span><span style={{ color: '#fff' }}>{total}</span>
       </div>
-      {total > 0 && (
-        <div style={{ marginTop: 4 }}>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-            <div style={{ flex: n1, height: 4, background: '#2dd4a8', borderRadius: 2 }} />
-            <div style={{ flex: Math.max(1, n2), height: 4, background: '#4f9cf9', borderRadius: 2 }} />
-          </div>
-        </div>
-      )}
+      {empBar}
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 6, paddingTop: 6, fontSize: 8 }}>
         <p style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Theory</p>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P₁ (cos²δ/2):</span><span style={{ color: '#fff' }}>{(p1 * 100).toFixed(1)}%</span></div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P₂ (sin²δ/2):</span><span style={{ color: '#fff' }}>{(p2 * 100).toFixed(1)}%</span></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Visibility:</span><span style={{ color: '#fff' }}>{(vis * 100).toFixed(1)}%</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Visibility:</span><span style={{ color: '#fff' }}>{(visibility * 100).toFixed(1)}%</span></div>
       </div>
     </div>
   );
 };
 
-/** Beginner Bottom Bar */
+/** Beginner Bottom Bar — topology-aware second slider */
 const BeginnerBottomBar = () => {
   const wavelength = useSimulationStore((s) => s.wavelength);
+  const iType = useSimulationStore((s) => s.interferometerType);
   const mirror2PosZ = useSimulationStore((s) => s.mirror2PosZ);
-  const mirror1PosX = useSimulationStore((s) => s.mirror1PosX);
+  const mirrorDisplacement = useSimulationStore((s) => s.mirrorDisplacement);
+  const sagnacOmega = useSimulationStore((s) => s.sagnacOmega);
   const setParam = useSimulationStore((s) => s.setParam);
-  const armX = Math.abs(mirror1PosX);
-  const armY = Math.abs(mirror2PosZ);
-  const opd = 2 * (armX - armY);
+
+  // Topology-aware second slider config
+  let sliderLabel, sliderValue, sliderDisplay, sliderMin, sliderMax, sliderStep, sliderOnChange;
+
+  if (iType === 'sagnac') {
+    sliderLabel = 'Angular Velocity Ω';
+    sliderValue = sagnacOmega;
+    sliderDisplay = `${sagnacOmega.toFixed(2)} rad/s`;
+    sliderMin = -10; sliderMax = 10; sliderStep = 0.01;
+    sliderOnChange = (e) => setParam('sagnacOmega', parseFloat(e.target.value));
+  } else if (iType === 'michelson') {
+    sliderLabel = 'Mirror Offset Δd';
+    sliderValue = mirrorDisplacement;
+    sliderDisplay = `${mirrorDisplacement.toFixed(1)} μm`;
+    sliderMin = -50; sliderMax = 50; sliderStep = 0.1;
+    sliderOnChange = (e) => setParam('mirrorDisplacement', parseFloat(e.target.value));
+  } else {
+    // MZI — nanometer step to avoid aliasing
+    sliderLabel = 'Geometry Offset Δd';
+    const opdNm = (2 * (Math.abs(useSimulationStore.getState().mirror1PosX) - Math.abs(mirror2PosZ)) * 1e9);
+    sliderDisplay = `${opdNm.toFixed(1)} nm`;
+    sliderValue = Math.abs(mirror2PosZ) * 1e6; // in μm for slider range
+    sliderMin = 50000; sliderMax = 500000; sliderStep = 1; // 1 nm steps
+    sliderOnChange = (e) => setParam('mirror2PosZ', -parseFloat(e.target.value) * 1e-6);
+  }
 
   return (
     <footer style={{ padding: '0 24px 24px', display: 'flex', gap: 24, flexShrink: 0 }}>
@@ -166,11 +185,11 @@ const BeginnerBottomBar = () => {
       </div>
       <div className="glass-card" style={{ flex: 1, borderRadius: 'var(--radius-high)', padding: '20px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <h4 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Geometry Offset Δd</h4>
-          <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: '#fff', fontWeight: 700 }}>{(opd * 1e6).toFixed(2)} μm</span>
+          <h4 style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-silver-200)', textTransform: 'uppercase', letterSpacing: '0.2em' }}>{sliderLabel}</h4>
+          <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: '#fff', fontWeight: 700 }}>{sliderDisplay}</span>
         </div>
-        <input type="range" min={50} max={500} step={0.001} value={Math.abs(mirror2PosZ) * 1e3}
-          onChange={(e) => setParam('mirror2PosZ', -parseFloat(e.target.value) * 1e-3)} />
+        <input type="range" min={sliderMin} max={sliderMax} step={sliderStep} value={sliderValue}
+          onChange={sliderOnChange} />
       </div>
     </footer>
   );
@@ -293,7 +312,11 @@ const App = () => {
               Simulab Research
             </h1>
             <p style={{ fontSize: 8, color: 'var(--text-mercury)', textTransform: 'uppercase', letterSpacing: '0.25em', opacity: 0.6 }}>
-              {isResearchMode ? 'Quantum Interferometry Suite v4.2' : 'Michelson Interferometer v4.2'}
+              {isResearchMode ? 'Quantum Interferometry Suite v4.2' : (
+                interferometerType === 'michelson' ? 'Michelson Interferometer v4.2' :
+                interferometerType === 'sagnac' ? 'Sagnac Interferometer v4.2' :
+                'Mach-Zehnder Interferometer v4.2'
+              )}
             </p>
           </div>
           {isResearchMode && (
@@ -329,7 +352,7 @@ const App = () => {
                 cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)',
               }}>
                 <span className="status-dot" style={{ opacity: simulationPaused ? 0.3 : 1 }} />
-                {simulationPaused ? 'PAUSED' : 'STABLE_OSCILLATION'}
+                {simulationPaused ? 'PAUSED' : 'Running'}
               </button>
               <button className="btn-primary" onClick={handleExport} style={{ fontSize: 8, padding: '6px 16px', gap: 6 }}>
                 <DownloadIcon /> Export Data

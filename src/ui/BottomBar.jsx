@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
+import { computeOPD } from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor } from '../physics/basicInterference.js';
 import { fringeVisibility, coherenceLength } from '../physics/coherenceModel.js';
 import { photonCount, phaseSNR } from '../physics/quantumModel.js';
@@ -17,24 +18,10 @@ const BottomBar = () => {
 
   const interferometerType = state.interferometerType;
 
-  // ── per-interferometer OPD (each uses its own correct formula) ──
-  const GAS_DATA_BB = { air: { n0: 293e-6 }, he: { n0: 35e-6 }, ar: { n0: 281e-6 } };
-  const gasNm1_bb = (GAS_DATA_BB[state.gasCellGas]?.n0 || 293e-6) * state.gasCellPressure;
-  const nGasBB    = 1 + gasNm1_bb;
-  const michelsonGasOPD  = 2 * (nGasBB - 1) * state.gasCellLength;
-  const michelsonMirOPD  = 2 * state.mirrorDisplacement * 1e-6;
-  const michelsonTotalOPD = michelsonGasOPD + michelsonMirOPD;
+  // ── Central OPD engine (topology-aware) ──
+  const opdResult = computeOPD(state);
+  const opd = opdResult.opd;
 
-  // MZI: drag-only OPD (no Michelson tip polluting).  Default arm both = 580px, scale 0.5e-6 m/px
-  const mziOPD = 0; // drag positions are equal by default; compensator subtracted below
-
-  const compensatorOPD = state.compensatorEnabled
-    ? ((state.compensatorRefractiveIndex || 1.5168) - 1) * (state.compensatorThickness || 0.00635)
-    : 0;
-
-  const opd = interferometerType === 'michelson' ? michelsonTotalOPD
-            : interferometerType === 'sagnac'    ? 0   // sagnac uses phaseDiff separately
-            : mziOPD - compensatorOPD;            // mzi
   const visibility = fringeVisibility(opd, state.laserLinewidth);
   const cohLen = coherenceLength(state.laserLinewidth);
   const N = photonCount(state.laserPower, state.wavelength, state.detectorExposureTime);
@@ -42,7 +29,7 @@ const BottomBar = () => {
   const snr = N > 0 ? phaseSNR(k * Math.abs(opd), N, state.squeezingParam) : 0;
   const snrDB = snr > 1e-10 ? (10 * Math.log10(snr)).toFixed(1) : '0';
 
-  const michelsonFringes = michelsonTotalOPD / state.wavelength;
+  const michelsonFringes = opd / state.wavelength;
   const michelsonRegime = state.mirrorTilt < 0.05 ? 'Circular' : state.mirrorTilt < 0.5 ? 'Curved' : state.mirrorTilt < 2 ? 'Straight' : 'Dense';
 
   // Sagnac calculations

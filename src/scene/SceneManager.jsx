@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
+import { computeOPD } from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor, detectionProbabilities } from '../physics/basicInterference.js';
 import { fringeVisibility } from '../physics/coherenceModel.js';
 
@@ -130,19 +131,8 @@ const SceneManager = () => {
   const armXphys = arm1LenPx * 0.0005;
   const armYphys = arm2LenPx * 0.0005;
 
-  // OPD from PHYSICS (store mirror positions in meters — nm/pm scale precision)
-  const physArmX = Math.sqrt(mirror1PosX ** 2 + mirror1PosZ ** 2);
-  const physArmY = Math.sqrt(mirror2PosX ** 2 + mirror2PosZ ** 2);
-  const tipOPD = (mirror1Tip - mirror2Tip) * physArmX;
-  const defaultArm1Px = 580, defaultArm2Px = 580;
-  const dragOPD = (arm1LenPx - defaultArm1Px - (arm2LenPx - defaultArm2Px)) * 0.5e-6;
-  const baseOPD = 2 * (physArmX - physArmY);
-  const compensatorOPD = compensatorEnabled
-    ? (compensatorRefractiveIndex - 1) * compensatorThickness
-    : 0;
-  // MZI OPD — ONLY from visual drag difference + compensator.
-  // Do NOT include Michelson store tipOPD/baseOPD: those belong to Michelson scene only.
-  const opd = dragOPD - compensatorOPD;
+  // MZI OPD — from central physics engine (includes drag, compensator, thermal, seismic, GW)
+  const opd = computeOPD(useSimulationStore.getState()).opd;
 
   /**
    * Build a photon with SUPERPOSITION paths.

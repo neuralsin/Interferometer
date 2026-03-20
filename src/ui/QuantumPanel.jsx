@@ -39,7 +39,10 @@ const QuantumPanel = () => {
   const darkCurrentNoise = state.detectorDarkCurrent * state.detectorExposureTime;
   const readoutNoise = state.detectorReadNoise;
   const totalElecNoise = Math.sqrt(darkCurrentNoise + Math.pow(readoutNoise, 2));
-  const effectiveQE = state.detectorQE * (1 - totalElecNoise / Math.max(1, Math.sqrt(N)));
+  // QE is a static material property — electronic noise reduces SNR, not QE
+  const effectiveQE = state.detectorQE;
+  // Signal-to-noise degradation from electronics (displayed separately)
+  const electronicSNRPenalty = N > 0 ? Math.min(1, Math.sqrt(N) / (Math.sqrt(N) + totalElecNoise)) : 0;
 
   // ── Precision predictions ──
   const armL = Math.sqrt(Math.pow(state.mirror1PosX, 2) + Math.pow(state.mirror1PosZ, 2));
@@ -51,9 +54,6 @@ const QuantumPanel = () => {
 
   // ── Optimal squeezing finder ──
   const optimalR = useMemo(() => {
-    // Find the squeezing that maximizes SNR for fixed N and hardware noise
-    // Beyond a point, anti-squeezed quadrature dominates
-    // Optimal: r_opt = ½ ln(2ηN) for ideal case
     const etaN = state.detectorQE * N;
     if (etaN <= 1) return 0;
     return Math.min(3, 0.5 * Math.log(2 * etaN));
@@ -67,13 +67,13 @@ const QuantumPanel = () => {
   const tFor5sigma = N > 0 ? Math.pow(5 / (Math.sqrt(N) * Math.exp(r)), 2) * state.detectorExposureTime : Infinity;
   const tForGW = strainPrec > 0 ? Math.pow((1e-21 / strainPrec), 2) * state.detectorExposureTime : Infinity;
 
-  // ── Statistical confidence ──
+  // ── Statistical confidence (capped) ──
   const measuredPhase = Math.abs(2 * Math.PI * 2 * armL / state.wavelength) % (2*Math.PI);
   const snrVal = phaseSNR(measuredPhase, N, r);
   const snrDB = snrVal > 1e-10 ? 10*Math.log10(snrVal) : 0;
-  const pValue = 0.5 * Math.exp(-Math.pow(snrVal,2)/2);
-  const sigmaLevel = snrVal;
-  const confidencePercent = (1 - 2*pValue) * 100;
+  const sigmaLevel = Math.min(snrVal, 100); // cap to prevent display overflow
+  const pValue = 0.5 * Math.exp(-Math.pow(Math.min(snrVal, 37),2)/2); // cap exp argument
+  const confidencePercent = Math.min(100, (1 - 2*pValue) * 100);
 
   // ── Squeeze ellipse ──
   const squeezeCurve = useMemo(() => {

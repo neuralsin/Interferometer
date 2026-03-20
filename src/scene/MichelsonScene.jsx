@@ -128,15 +128,26 @@ const MichelsonScene = () => {
       const AMP = st.waveAnimAmplitude;
       const powerFactor = Math.min(1, st.laserPower / 5e-3);
 
-      // === Real physics OPD ===
+      // === Real physics OPD (includes tilt via spatial average) ===
       const gOPD = 2 * (nVal - 1) * st.gasCellLength; // gas cell contribution
       const mOPD = 2 * mirPos;                          // mirror displacement
+      // Include tilt: spatial average of cos²(δ/2 + k*θ*x) across detector
+      const tiltRad = tiltVal * 1e-3; // mrad → rad
+      const k = 2 * Math.PI / lamVal;
+      const detSize = 0.01; // 10mm detector
+      let intensitySum = 0;
+      const N_STEPS = 32;
+      for (let si = 0; si < N_STEPS; si++) {
+        const x = -detSize/2 + (si / (N_STEPS-1)) * detSize;
+        const localOPD = gOPD + mOPD + 2 * tiltRad * x;
+        const localPhase = k * localOPD;
+        intensitySum += Math.cos(localPhase / 2) ** 2;
+      }
+      const intensity = intensitySum / N_STEPS;
+      const isC = intensity > 0.5;
       const tOPD = gOPD + mOPD;
       const phTotal = (2 * Math.PI / lamVal) * tOPD;
       const phMod = ((phTotal % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-      // I = I₀cos²(Δφ/2)  — intensity at detector
-      const intensity = Math.cos(phMod / 2) ** 2;
-      const isC = intensity > 0.5;
 
       // Component positions (scale with canvas)
       const bsX = Math.round(W2 * 0.38), bsY = Math.round(H2 * 0.50);
@@ -243,31 +254,31 @@ const MichelsonScene = () => {
         ctx.fillText(intLabel, bsX + 16, bsY - 10);
       }
 
-      // ── Photon particle (single photon, loops along beam path) ──
+      // ── Photon superposition (dual-ghost: both arms simultaneously) ──
       const ph = photonRef.current;
       ph.t += dtS * 0.18; // slow: takes ~5.5s per loop
-      if (ph.t >= 1) { ph.t = 0; ph.arm = (ph.arm + 1) % 2; }
+      if (ph.t >= 1) { ph.t = 0; }
       const tVal = ph.t;
-      // Define path segments for each arm
-      let phX, phY;
-      if (ph.arm === 0 && m1On) {
-        // Laser → BS → M1 → BS → Detector
-        const pathPts = [
+      // Ghost 1: Arm 1 (BS → M1 → BS → Detector)
+      let phX1, phY1;
+      if (m1On) {
+        const pathPts1 = [
           {x: laserX + 32, y: laserY},
           {x: bsX, y: bsY},
           {x: m1X, y: m1Y + 12},
           {x: bsX, y: bsY},
           {x: detX, y: detY - 18},
         ];
-        // interpolate
-        const totalSegs = pathPts.length - 1;
-        const segIdx = Math.min(totalSegs - 1, Math.floor(tVal * totalSegs));
-        const segT = (tVal * totalSegs) - segIdx;
-        phX = pathPts[segIdx].x + segT * (pathPts[segIdx+1].x - pathPts[segIdx].x);
-        phY = pathPts[segIdx].y + segT * (pathPts[segIdx+1].y - pathPts[segIdx].y);
-      } else if (ph.arm === 1 && m2On) {
-        // Laser → BS → Gas → M2 → Gas → BS → Detector
-        const pathPts = [
+        const totalSegs1 = pathPts1.length - 1;
+        const segIdx1 = Math.min(totalSegs1 - 1, Math.floor(tVal * totalSegs1));
+        const segT1 = (tVal * totalSegs1) - segIdx1;
+        phX1 = pathPts1[segIdx1].x + segT1 * (pathPts1[segIdx1+1].x - pathPts1[segIdx1].x);
+        phY1 = pathPts1[segIdx1].y + segT1 * (pathPts1[segIdx1+1].y - pathPts1[segIdx1].y);
+      }
+      // Ghost 2: Arm 2 (BS → Gas → M2 → Gas → BS → Detector)
+      let phX2, phY2;
+      if (m2On) {
+        const pathPts2 = [
           {x: laserX + 32, y: laserY},
           {x: bsX, y: bsY},
           {x: gasBoxX + gasBoxW / 2, y: bsY},
@@ -276,29 +287,30 @@ const MichelsonScene = () => {
           {x: bsX, y: bsY},
           {x: detX, y: detY - 18},
         ];
-        const totalSegs = pathPts.length - 1;
-        const segIdx = Math.min(totalSegs - 1, Math.floor(tVal * totalSegs));
-        const segT = (tVal * totalSegs) - segIdx;
-        phX = pathPts[segIdx].x + segT * (pathPts[segIdx+1].x - pathPts[segIdx].x);
-        phY = pathPts[segIdx].y + segT * (pathPts[segIdx+1].y - pathPts[segIdx].y);
+        const totalSegs2 = pathPts2.length - 1;
+        const segIdx2 = Math.min(totalSegs2 - 1, Math.floor(tVal * totalSegs2));
+        const segT2 = (tVal * totalSegs2) - segIdx2;
+        phX2 = pathPts2[segIdx2].x + segT2 * (pathPts2[segIdx2+1].x - pathPts2[segIdx2].x);
+        phY2 = pathPts2[segIdx2].y + segT2 * (pathPts2[segIdx2+1].y - pathPts2[segIdx2].y);
       }
 
-      if (phX !== undefined) {
-        // Draw photon glow
+      // Draw both ghost particles (quantum superposition)
+      const drawGhost = (phX, phY, alpha) => {
+        if (phX === undefined) return;
         const phGrad = ctx.createRadialGradient(phX, phY, 0, phX, phY, 10);
-        phGrad.addColorStop(0, `rgba(${clr},${clg},${clb},0.9)`);
-        phGrad.addColorStop(0.5, `rgba(${clr},${clg},${clb},0.3)`);
+        phGrad.addColorStop(0, `rgba(${clr},${clg},${clb},${0.9*alpha})`);
+        phGrad.addColorStop(0.5, `rgba(${clr},${clg},${clb},${0.3*alpha})`);
         phGrad.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = phGrad;
         ctx.beginPath(); ctx.arc(phX, phY, 10, 0, Math.PI * 2); ctx.fill();
-        // Core dot
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(phX, phY, 2.5, 0, Math.PI * 2); ctx.fill();
-        // Label
-        ctx.fillStyle = `rgba(${clr},${clg},${clb},0.6)`;
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.beginPath(); ctx.arc(phX, phY, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = `rgba(${clr},${clg},${clb},${0.5*alpha})`;
         ctx.font = '600 7px sans-serif'; ctx.textAlign = 'center';
         ctx.fillText('γ', phX, phY - 12);
-      }
+      };
+      drawGhost(phX1, phY1, 0.7);
+      drawGhost(phX2, phY2, 0.7);
 
       // ── Components ──
       // Laser

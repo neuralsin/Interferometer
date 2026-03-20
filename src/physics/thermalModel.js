@@ -15,10 +15,10 @@
  */
 
 export const MATERIAL_CTE = {
-  invar:        1.2e-6,
-  aluminum:     23e-6,
-  steel:        17e-6,
-  zerodur:      0.05e-6,
+  invar: 1.2e-6,
+  aluminum: 23e-6,
+  steel: 17e-6,
+  zerodur: 0.05e-6,
   fused_silica: 0.55e-6,
 };
 
@@ -44,8 +44,8 @@ export const thermalExpansion = (length, deltaT, material = 'invar') => {
  * @param {string} material
  * @returns {number} Additional OPD contribution (meters)
  */
-export const thermalOPDShift = (armLengthX, armLengthY, deltaT, material = 'invar') => {
+export const thermalOPDShift = (armLengthX, armLengthY, deltaT, material = 'invar', passFactor = 2) => {
   const dLx = thermalExpansion(armLengthX, deltaT, material);
   const dLy = thermalExpansion(armLengthY, deltaT, material);
-  return 2 * (dLx - dLy); // factor of 2 for double-pass
+  return passFactor * (dLx - dLy); // passFactor: 2 for double-pass (Michelson), 1 for MZI
 };
