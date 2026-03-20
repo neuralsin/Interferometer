@@ -47,6 +47,7 @@ const DEFAULT_PARAMS = {
   /* ===== QUANTUM ===== */
   squeezingParam: 0.0,              // r — squeeze factor
   squeezingAngle: 0.0,              // rad — squeeze angle θ
+  detectorExposureTime: 0.01,       // s — integration time for photon counts
 
   /* ===== MIRROR 1 (End mirror, X-arm) ===== */
   mirror1PosX: 0.175,            // m
@@ -192,13 +193,17 @@ export const computeOPD = (state) => {
     };
   }
 
+  // ── Environment Refractive Index (Edlén approximation) ──
+  const index = 1 + 0.000293 * (state.envPressure / 101325) * (293.15 / state.envTemperature);
+
   if (iType === 'sagnac') {
-    // Sagnac: phase from rotation, NOT a linear OPD in the same sense
+    // Sagnac: phase from rotation, NOT a linear OPD
+    const mediumWavelength = state.wavelength / index;
     const A = state.sagnacNumLoops * Math.PI * state.sagnacLoopRadius ** 2;
-    const fringeShift = (4 * A * Math.abs(state.sagnacOmega)) / (C_LIGHT * state.wavelength);
+    const fringeShift = (4 * A * Math.abs(state.sagnacOmega)) / (C_LIGHT * mediumWavelength);
     const phase = 2 * Math.PI * fringeShift;
     return {
-      opd: fringeShift * state.wavelength, // effective OPD for display
+      opd: fringeShift * mediumWavelength, // effective OPD for display
       tiltFactor: 0,  // no tilt in Sagnac
       tiltRad: 0,
       sagnacPhase: phase,
@@ -207,13 +212,12 @@ export const computeOPD = (state) => {
 
   // MZI: compensator + drag geometry + noise
   const compensatorOPD = state.compensatorEnabled
-    ? ((state.compensatorRefractiveIndex || 1.5168) - 1) * (state.compensatorThickness || 0.00635)
+    ? ((state.compensatorRefractiveIndex || 1.5168) - index) * (state.compensatorThickness || 0.00635)
     : 0;
   // Drag OPD from visual arm-length difference (SceneManager positions)
-  // Default arms are equal, so dragOPD ≈ 0 unless user physically drags components
   const armX = Math.sqrt((state.mirror1PosX || 0) ** 2 + (state.mirror1PosZ || 0) ** 2);
   const armY = Math.sqrt((state.mirror2PosX || 0) ** 2 + (state.mirror2PosZ || 0) ** 2);
-  const geometricOPD = (armX - armY); // single-pass for MZI
+  const geometricOPD = index * (armX - armY); // single-pass for MZI
   return {
     opd: geometricOPD - compensatorOPD + thermalOPD + seismicOPD + gwOPD,
     tiltFactor: 1,  // single-pass transmission

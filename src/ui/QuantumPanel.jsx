@@ -65,7 +65,7 @@ const QuantumPanel = () => {
   const detectableDisp = dispPrec; // min detectable displacement
   const detectableForce = detectableDisp * (state.mirror1Mass||0.25) * Math.pow(2*Math.PI*100, 2); // assume 100Hz
   const tFor5sigma = N > 0 ? Math.pow(5 / (Math.sqrt(N) * Math.exp(r)), 2) * state.detectorExposureTime : Infinity;
-  const tForGW = strainPrec > 0 ? Math.pow((1e-21 / strainPrec), 2) * state.detectorExposureTime : Infinity;
+  const tForGW = strainPrec > 0 ? Math.pow((strainPrec / 1e-21), 2) * state.detectorExposureTime : Infinity;
 
   // ── Statistical confidence (capped) ──
   const measuredPhase = Math.abs(2 * Math.PI * 2 * armL / state.wavelength) % (2*Math.PI);
@@ -142,7 +142,7 @@ const QuantumPanel = () => {
             <QM label="σ-level" value={sigmaLevel.toFixed(2)} unit="σ" tip="Signal/noise ratio in standard deviations" />
             <QM label="Time to 5σ" value={tFor5sigma < 3600 ? `${tFor5sigma.toFixed(2)} s` : tFor5sigma < 86400 ? `${(tFor5sigma/3600).toFixed(1)} hr` : `${(tFor5sigma/86400).toFixed(1)} d`} unit=""
               tip="Integration time for 5σ detection at current power" />
-            <QM label="Time for h=10⁻²¹" value={tForGW < 1e10 ? `${tForGW.toExponential(1)} s` : '∞'} unit=""
+            <QM label="Time for h=10⁻²¹" value={tForGW < 3600 ? `${tForGW.toExponential(1)} s` : tForGW < 3.15e7 ? `${(tForGW/86400).toFixed(1)} d` : `${(tForGW/3.15e7).toExponential(1)} yr`} unit=""
               tip="How long to accumulate strain precision of 10⁻²¹" />
             <QM label="Effective QE" value={`${(effectiveQE*100).toFixed(1)}%`} unit=""
               tip="QE degraded by dark current and readout noise" />

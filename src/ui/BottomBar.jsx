@@ -31,6 +31,10 @@ const BottomBar = () => {
 
   const michelsonFringes = opd / state.wavelength;
   const michelsonRegime = state.mirrorTilt < 0.05 ? 'Circular' : state.mirrorTilt < 0.5 ? 'Curved' : state.mirrorTilt < 2 ? 'Straight' : 'Dense';
+  const n0_bb = state.gasCellGas === 'air' ? 0.000293 : state.gasCellGas === 'he' ? 0.000035 : 0.000281;
+  const nGasBB = 1 + n0_bb * (state.gasCellPressure || 1);
+  const michelsonGasOPD = 2 * (nGasBB - 1) * (state.gasCellLength || 0.05);
+  const michelsonMirOPD = 2 * (state.mirrorDisplacement || 0) * 1e-6;
 
   // Sagnac calculations
   const sagnac = computeSagnac({

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
-import { computeOPD } from '../store/simulationStore.js';
+import { computeOPD, computeTiltAveragedProbability } from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor, detectionProbabilities } from '../physics/basicInterference.js';
 import { fringeVisibility } from '../physics/coherenceModel.js';
 
@@ -154,10 +154,8 @@ const SceneManager = () => {
       // No BS2 → photon takes one arm randomly, goes straight to its detector
       goD1 = Math.random() < 0.5;
     } else if (bothArmsActive) {
-      // Full MZI interference
-      const { p1 } = detectionProbabilities(st.wavelength, opd);
-      const vis = fringeVisibility(opd, st.laserLinewidth);
-      const effectiveP1 = p1 * vis + 0.5 * (1 - vis);
+      // Full MZI interference (tilt-aware)
+      const { p1: effectiveP1 } = computeTiltAveragedProbability(st);
       goD1 = Math.random() < effectiveP1;
     } else {
       // Only one arm → no interference → 50:50
@@ -200,9 +198,8 @@ const SceneManager = () => {
   const fireN = useCallback((n) => {
     const st = useSimulationStore.getState();
     const bothArms = st.m1Enabled && st.m2Enabled;
-    const { p1 } = detectionProbabilities(st.wavelength, opd);
-    const vis = fringeVisibility(opd, st.laserLinewidth);
-    const effectiveP1 = (bothArms && st.bs2Enabled) ? (p1 * vis + 0.5 * (1 - vis)) : 0.5;
+    const { p1 } = computeTiltAveragedProbability(st);
+    const effectiveP1 = (bothArms && st.bs2Enabled) ? p1 : 0.5;
 
     // Instantly resolve bulk (n-5) photons statistically
     const animateCount = Math.min(5, n);

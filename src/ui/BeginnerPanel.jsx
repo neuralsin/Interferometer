@@ -42,7 +42,7 @@ const BeginnerPanel = () => {
 
   // Use central OPD engine for topology-aware calculation
   const state = useSimulationStore();
-  const { opd, tiltFactor } = computeOPD(state);
+  const { opd, tiltFactor, tiltRad } = computeOPD(state);
 
   // Render real fringe pattern from physics engine
   useEffect(() => {
@@ -66,8 +66,8 @@ const BeginnerPanel = () => {
       const fringeData = generateFringePattern({
         wavelength,
         opdCenter: opd,
-        tiltX: mirror1Tip,
-        tiltY: mirror2Tip,
+        tiltX: tiltFactor === 0 ? 0 : tiltRad / Math.SQRT2,
+        tiltY: tiltFactor === 0 ? 0 : tiltRad / Math.SQRT2,
         tiltFactor,
         resolution,
         detectorSize: 0.01,
@@ -217,7 +217,7 @@ const BeginnerPanel = () => {
                 padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)',
                 textAlign: 'center', color: '#fff', marginBottom: 16,
               }}>
-                δ = (2π / λ) × 2Δd
+                δ = (2π / λ) × Δd
               </div>
             </>
           )}

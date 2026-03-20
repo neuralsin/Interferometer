@@ -360,7 +360,7 @@ const PhysicsNoisePanel = () => {
             {/* Side Metrics */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <MetricTile label="Seismic Injection" value={seismicRMS.toExponential(2)} unit="m/√Hz" progress={Math.min(100, seismicRMS * 1e12 * 50)} />
-              <MetricTile label="Phase Noise Integral" value={phaseNoiseIntegral.toFixed(3)} unit="rad RMS" progress={Math.min(100, phaseNoiseIntegral * 300)} />
+              <MetricTile label="Source Phase Drift (Abs)" value={phaseNoiseIntegral.toFixed(1)} unit="rad RMS" progress={Math.min(100, phaseNoiseIntegral * 300)} />
               <button className="btn-ghost" style={{ marginTop: 'auto', width: '100%', justifyContent: 'center' }}>
                 <DownloadSvg /> Export PSD_Data
               </button>
