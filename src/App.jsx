@@ -176,11 +176,21 @@ const BeginnerBottomBar = () => {
   } else {
     // MZI — nanometer step to avoid aliasing
     sliderLabel = 'Geometry Offset Δd';
-    const opdNm = (Math.abs(useSimulationStore.getState().mirror1PosX) - Math.abs(mirror2PosZ)) * 1e9;
+    const baseArm = Math.abs(useSimulationStore.getState().mirror1PosX);
+    const opdNm = (baseArm - Math.abs(mirror2PosZ)) * 1e9;
     sliderDisplay = `${opdNm.toFixed(1)} nm`;
-    sliderValue = Math.abs(mirror2PosZ) * 1e6; // in μm for slider range
-    sliderMin = 50000; sliderMax = 500000; sliderStep = 0.001; // 0.001 μm = 1 nm steps
-    sliderOnChange = (e) => setParam('mirror2PosZ', -parseFloat(e.target.value) * 1e-6);
+    
+    // Fine sub-wavelength tuning: ±2000 nm
+    sliderMin = -2000; 
+    sliderMax = 2000; 
+    sliderStep = 1;
+    sliderValue = opdNm;
+    
+    sliderOnChange = (e) => {
+      const newOpdNm = parseFloat(e.target.value);
+      const newM2 = baseArm - (newOpdNm * 1e-9);
+      setParam('mirror2PosZ', newM2);
+    };
   }
 
   return (

@@ -603,11 +603,11 @@ const SceneManager = () => {
 
       // Theory display
       ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = `500 ${ps(9)}px sans-serif`;
-      ctx.fillText(`Sent: ${st.simFired}`, px(680), py(20));
+      ctx.fillText(`Sent: ${st.simFired}`, px(680), py(45));
       const { p1: tp1, p2: tp2 } = detectionProbabilities(st.wavelength, opd);
       ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = `${ps(8)}px monospace`;
       const interferenceLabel = (st.m1Enabled && st.m2Enabled && st.bs2Enabled) ? '' : ' (no interference)';
-      ctx.fillText(`P(D1)=${(tp1 * 100).toFixed(0)}% P(D2)=${(tp2 * 100).toFixed(0)}%${interferenceLabel}`, px(680), py(35));
+      ctx.fillText(`P(D1)=${(tp1 * 100).toFixed(0)}% P(D2)=${(tp2 * 100).toFixed(0)}%${interferenceLabel}`, px(680), py(60));
 
       // Formula subheading
       ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = `${ps(7)}px monospace`; ctx.textAlign = 'left';
