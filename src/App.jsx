@@ -111,6 +111,16 @@ const DetectionOverlay = ({ isResearch }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>P(destr):</span><span style={{ color: '#f5a623' }}>{(p2 * 100).toFixed(1)}%</span></div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Phase:</span><span style={{ color: '#fff' }}>{((opdResult.sagnacPhase || 0) / (2 * Math.PI)).toFixed(4)}λ</span></div>
         </div>
+        {/* Sagnac Effect Formula — theoretical traceability */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: 6, paddingTop: 6 }}>
+          <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 4, letterSpacing: '0.05em' }}>
+            Δφ = 8π A Ω / (λ c)
+          </div>
+          <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.3)', display: 'flex', justifyContent: 'space-between' }}>
+            <span>A = {sArea.toFixed(2)} m²</span>
+            <span>Ω = {state.sagnacOmega.toFixed(3)}</span>
+          </div>
+        </div>
       </div>
     );
   }

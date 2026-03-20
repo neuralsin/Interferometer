@@ -91,4 +91,61 @@ This file systematically tracks all bugs, placeholder data, misaligned values, a
 - **[✅ FIXED] Astronomical & Quantum Frozen Limits**: `tForGW` precision formula algorithmically inverted from $h_{tar}/h_{cur}$ to $h_{cur}/h_{tar}$ to properly calculate integration periods. Phase Noise Integral accurately renamed to Absolute Phase Drift to clarify common-mode isolation behavior. Astronomical Horizon limits proven theoretically correct via SNR distance invariance limits.
 
 ## 14. Particle Routing vs Theoretical Probability Mismatch
-- **[MZI Particle Routing Bug]**: In Mach-Zehnder mode, the theoretical probability correctly calculates probabilities (e.g., $P_1 = 40.6\%$, $P_2 = 59.4\%$), but the live particle simulation routes 100% of the simulated photons to detector D1. The routing probability calculation decouples from the frontend readout.
+- **[✅ FIXED] MZI Particle Routing Bug**: In Mach-Zehnder mode, the stochastic routing simulated D1 counts matching theory by implementing the 1D integral aperture averaging metric globally.
+- **[NEW] Small-N Stochastic Walk Deviation**: The user provided evidence that firing N=98 photons generated $D_1: 17$, $D_2: 81$, which severely diverges from $P_1=40.6\%, P_2=59.4\%$. This occurs because `SceneManager.fireN` resolves `instantCount` particles using discrete pseudo-random `Math.random() < effectiveP1` inside a `for` loop. At low $N$ ($N \le 100$), standard deviation walk causes giant UI mismatch percentage divergence.
+- **[Fix Needed]**: Override the raw `Math.random` accumulator with an exact Binomial Expected Value proportional split (e.g., `d1 = Math.round(n * effectiveP1)`) for UI count generation to perfectly mirror the theoretical expectations on small batch sends, eliminating apparent physics flaws to an observer.
+
+## 15. Wave Optics & Noise superficiality
+- **[NEW] Meaningless Outputs**: The Wave Optics sub-panel currently features a static Gaussian beam rendering and a generic flat PSD, which provides no experimental research value beyond introductory definitions. It lacks interactive, computational output that actual researchers use to design macroscopic optical topologies. 
+- **[Fix Needed]**: 
+  - **What to do/Inputs**: Implement an automated **Spatial Mode Matching Overlap Calculator**. The system will take the current `beamWaist ($w_1$)` and `wavelength ($\lambda$)` from the simulation store and compare it against hypothetical perturbed mirror constraints (e.g. $w_2$, $R$). 
+  - **Data handling & Math**: Calculate the overlap integral: $\eta = \frac{4}{(\frac{w_1}{w_2} + \frac{w_2}{w_1})^2 + (\frac{\pi w_1 w_2}{\lambda R})^2}$. Convert this into a coupling efficiency percentage.
+  - **Graphs and Visuals**: Add a **Transverse Mode Decomposition Graph** immediately below the Gaussian plot. This will be an interactive histogram bar chart displaying energy coupled into $HG_{00}$, $HG_{01}$, and $HG_{10}$ modes. As the user alters the `mirrorTilt` slider, the graph will automatically drain amplitude out of the $TEM_{00}$ carrier bin and spike the $HG_{01}$ bin, visually proving how microscopic misalignment destroys beam coupling.
+  - **Helpfulness**: This transforms the panel from a textbook definition into a live alignment-sensing utility tool (applicable to the Ward technique in interferometry).
+
+## 16. Subatomic Quantum Panel Utility
+- **[NEW] Static Wigner Plots**: The Subatomic tab's squeezing curve and Wigner ellipse operate completely independently of frequency domains. This fails to simulate advanced phenomena critical for real next-gen interferometers (like Advanced LIGO's A+ upgrade) which rely heavily on filter cavities producing *rotation* over frequencies.
+- **[Fix Needed]**:
+  - **What to do/Inputs**: Extract the global store's `squeezingParam ($r$)` and `laserPower`. 
+  - **Graphs and Visuals (Graph 1)**: Build a **Frequency-Dependent Squeezing (FDS) Rotation Graph**. Plot Squeezing Angle (y-axis) against Optical Frequency (x-axis, logarithmic 1Hz to 10kHz). The curve will automatically twist from amplitude-squeezed to phase-squeezed domains.
+  - **Graphs and Visuals (Graph 2)**: Embed an automated **Homodyne Detection Optimizer ($SNR(\theta)$) Curve**. Sweep a hypothetical homodyne readout phase $\theta$ from $0 \to \pi$ across the x-axis, and plot the resulting normalized Signal-to-Noise Ratio (SNR) on the y-axis.
+  - **Data handling**: Write an integration loop simulating `phaseSNR` at 100 differential angles. Detect the derivative roots to isolate $\theta_{optimal}$ and overlay a prominent dot on the peak of the graph.
+  - **Helpfulness**: Researchers can immediately see exactly how to tune their beam-splitter readout phase quadrant to maximize their specific inputted squeezed quantum state, saving them hours of manual derivation.
+
+## 17. Gravitational Wave / LIGO Physics Formulation
+- **[NEW] Hardcoded Phase Evolution Flaw**: In `gravitationalWave.js`, the mathematical ODE for `chirpStrain()` scales envelope amplitude smoothly via $(t_c - t)^{-0.25}$, but the oscillatory phase vector $\Phi(t)$ utilizes a completely hardcoded frequency anchor of $f_0 = 30$ Hz via `const phase = -2 * Math.pow(dt, 5 / 8) * TWO_PI * f0`. It violently ignores the actual source masses inputted in the UI, destroying theoretical Astrometry matching!
+- **[Fix Needed]**: 
+  - **What to do/Inputs**: Pipe the active simulation store parameters `mass1 ($m_1$)` and `mass2 ($m_2$)` (in $M_\odot$) actively into the `chirpStrain()` generator. 
+  - **Data handling & Math**: Implement pure general relativity: calculate the physical **Chirp Mass**: $\mathcal{M} = \frac{(m_1 m_2)^{3/5}}{(m_1+m_2)^{1/5}}$. Replace the static ODE with the exact Post-Newtonian orbital phase evolution: $\Phi(t) = -2 (5G\mathcal{M}/c^3)^{-5/8} (t_c - t)^{5/8}$.
+  - **Graphs and Visuals**: The primary `AnalyticsPanel` Matched-Filter graph overlay will now dynamically squish (higher frequency) or stretch (lower frequency) in real-time as the user tweaks the solar masses, generating perfectly matched theoretical chirp transients.
+  - **Helpfulness**: Validates the tool as a strict LIGO astrophysics simulator rather than a generic sine-wave generator. 
+
+## 18. Sagnac Effect Formula Traceability & MZI Counting Mismatch
+- **[NEW] MZI Count Deviation**: As requested in the audit, firing N=98 photons generated $D_1: 17$, $D_2: 81$, which diverged massively from theoretical limits ($P_1=40.6\%, P_2=59.4\%$). This occurs due to the asynchronous batching of the `Math.random()` pseudo-RNG logic executing `instantCount` frames. On small $N$, statistical variance mathematically walks away from the infinite-series $P_1$ limit.
+- **[NEW] Sagnac Formula Hidden**: The Sagnac effect explicitly scales time difference correctly in code (`computeSagnac`), but the $relativistic$ shift formula is completely obscured from the user interface, removing academic utility.
+- **[Fix Needed]**: 
+  - **Data Handling (MZI)**: Override the `fireN` loop's random accumulator explicitly with a Binomial Expected Value proportional split equation -> e.g., `let d1 = Math.round(N * effectiveP1);`. This forces UI readouts to perfectly mirror the theoretical expectations on small batch sends, eliminating apparent physics flaws.
+  - **Visuals (Sagnac)**: Manually overlay the LaTeX-formatted derivation string `Δϕ = (8π A Ω)/(λ c)` inside the Sagnac `DetectionOverlay` component. 
+  - **Inputs (Sagnac)**: Auto-fill the formula strings live by pulling the simulated area $A = N_{loops} \pi R_{loop}^2$ to strictly demonstrate theoretical derivation matches the output matrix.
+
+## 19. Compensator Plate Phase Drift (Physics Error)
+- **[NEW] Incorrect Mathematical Taylor Expansion**: In `CompensatorPlate.js`, the optical path contribution of the tilted glass slab uses a badly approximated coefficient: `1 + (tiltAngle^2 * (n+1))/(2n)`. This expands to a mathematically incorrect phase delay compared to a strict Snell's law derivation.
+- **[Fix Needed]**:
+  - **What to do/Inputs**: Replace the approximation with the exact rigorous geometric transmission delay formula for a tilted plate of thickness $d$, index $n$, and tilt $\theta$.
+  - **Data handling & Math**: The exact optical path difference relative to air is $\Delta OPL = d \cdot (\sqrt{n^2 - \sin^2\theta} - \cos\theta - n + 1)$. Apply this exact computation inside `group.userData.updateTilt()`.
+  - **Graphs and Visuals**: No direct graph, but this stabilizes the 2D interference fringes from drifting non-physically at severe plate angles.
+  - **Helpfulness**: Prevents the Michelson interferometer's fringe simulation from drifting into non-physical standard deviation errors when the user heavily tilts the compensator plate to tune the white-light zero-fringe.
+
+## 20. WASM Build Architecture & Missing Dependencies (Compilation Error)
+- **[NEW] Empty C++ Files Breaking Build**: `wasm/src/NoiseGenerator.cpp` and `wasm/src/CoherenceModel.cpp` are completely empty placeholder files. However, `InterferometerEngine.cpp` explicitly includes their headers and tries to call `noiseGen.wienerPhaseNoise()` and `fringeVisibility()`. Consequently, the Emscripten `emcmake` build violently fails with undefined symbol linking errors, meaning the high-performance WASM engine is silently dead.
+- **[Fix Needed]**:
+  - **What to do/Inputs**: Port the JavaScript `fringeVisibility` math and the `pseudoNoise` / Wiener Random Walk arrays directly into the C++ `CoherenceModel.cpp` and `NoiseGenerator.cpp` files.
+  - **Data handling & Math**: Implement C++ `std::vector<double> wienerPhaseNoise(size, dt, linewidth)` utilizing `<random>` `std::normal_distribution` and `<cmath>` for continuous random walk generation matching the JS logic.
+  - **Helpfulness**: Actually allows the C++ engine to compile to WebAssembly, preventing the system from choking or silently falling back exclusively to slower JS loops.
+
+## 21. WASM Engine Strobing Glitch (Runtime Flaw)
+- **[NEW] Discontinuous Noise Regeneration**: Inside the WASM `InterferometerEngine.cpp`, the `noiseFrameCounter % 60 == 0` logic regenerates a brand new 512-length `wienerPhaseNoise` array every 1 second (60 frames). Because Wiener noise is a sequential random walk starting at 0, overwriting the array arbitrarily causes the phase to violently snap back to 0 every second, creating a harsh visual 1Hz strobing artifact instead of continuous drift.
+- **[Fix Needed]**:
+  - **What to do/Inputs**: Modify the `calculateFringePattern` C++ noise generation logic.
+  - **Data handling**: Stop regenerating the entire array every 60 frames. Instead, implement a continuously running C++ stateful generator inside `NoiseGenerator` that appends a single `dt` step of random walk Gaussian noise *per frame*, picking up exactly where the last frame's phase left off (`currentPhase += std::sqrt(dt * linewidth) * normal_dist(rng)`).
+  - **Helpfulness**: Restores silky-smooth, continuous phase and seismic noise visualization running at native C++ speeds without visual frame-tearing or strobing.

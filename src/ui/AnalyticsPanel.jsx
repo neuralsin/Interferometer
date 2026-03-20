@@ -205,7 +205,7 @@ export default function AnalyticsPanel() {
       for (let x=0;x<w;x++) {
         const tSample = t - viewW + (x/w)*viewW;
         const tLoc    = ((tSample % tMerge) + tMerge) % tMerge;
-        const strain  = chirpStrain(tLoc, cur.gwStrain * 1e19, tMerge, f0);
+        const strain  = chirpStrain(tLoc, cur.gwStrain * 1e19, tMerge, cur.mass1, cur.mass2);
         tArr.push(tSample); strArr.push(strain);
       }
       const strMax = Math.max(...strArr.map(Math.abs), 1e-10);

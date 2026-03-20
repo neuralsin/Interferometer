@@ -100,6 +100,37 @@ const QuantumPanel = () => {
   const wignerNeg = r > 0 ? 'No (Gaussian)' : 'No (Coherent)';
   const entanglement = r > 0.5 ? `${(2*r/Math.log(2)).toFixed(1)} ebits` : 'Negligible';
 
+  // ── Frequency-Dependent Squeezing (FDS) rotation curve ──
+  // Filter cavity rotates squeezing angle: θ(f) = arctan(f / f_cc) where f_cc = cavity pole
+  const fdsCurve = useMemo(() => {
+    const pts = [];
+    const fcc = 50; // filter cavity pole frequency (Hz) — typical for aLIGO
+    for (let i = 0; i <= 100; i++) {
+      const f = Math.pow(10, (i / 100) * 4); // 1Hz → 10kHz log scale
+      const rotAngle = Math.atan2(f, fcc); // rotation from amplitude to phase quadrature
+      const effectiveR = r * Math.cos(2 * rotAngle); // effective squeezing at this freq
+      pts.push({ f, angle: rotAngle * 180 / Math.PI, effR: effectiveR });
+    }
+    return pts;
+  }, [r]);
+
+  // ── Homodyne Detection SNR(θ) optimizer ──
+  // SNR(θ) = |signal(θ)| / noise(θ) where signal ∝ cos(θ), noise = sqrt(e^{-2r}cos²θ + e^{2r}sin²θ)
+  const homodyneCurve = useMemo(() => {
+    const pts = [];
+    let bestTheta = 0, bestSNR = 0;
+    for (let i = 0; i <= 100; i++) {
+      const theta = (i / 100) * Math.PI;
+      const signal = Math.abs(Math.cos(theta));
+      const noiseVar = Math.exp(-2 * r) * Math.cos(theta) ** 2 + Math.exp(2 * r) * Math.sin(theta) ** 2;
+      const noise = Math.sqrt(Math.max(1e-30, noiseVar));
+      const snr = signal / noise;
+      if (snr > bestSNR) { bestSNR = snr; bestTheta = theta; }
+      pts.push({ theta: theta * 180 / Math.PI, snr });
+    }
+    return { pts, bestTheta: bestTheta * 180 / Math.PI, bestSNR };
+  }, [r]);
+
   return (
     <div style={{ flex:1, overflow:'auto', padding:24, display:'flex', flexDirection:'column', gap:16 }}>
       <header style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -222,6 +253,25 @@ const QuantumPanel = () => {
         <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
           <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Phase Sensitivity vs Squeezing</h3>
           <SensitivityCanvas data={sensCurve} currentR={r} optR={optimalR} />
+        </section>
+      </div>
+
+      {/* ═══ NEW: FDS + Homodyne Optimizer ═══ */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Freq-Dependent Squeezing</h3>
+          <FDSCanvas data={fdsCurve} />
+          <div style={{ fontSize:7, fontFamily:'var(--font-mono)', color:'rgba(255,255,255,0.3)', marginTop:6 }}>
+            θ(f) = arctan(f/f_cc) | f_cc = 50Hz filter cavity pole
+          </div>
+        </section>
+        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Homodyne SNR Optimizer</h3>
+          <HomodyneCanvas data={homodyneCurve} />
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:8, fontFamily:'var(--font-mono)', color:'rgba(255,255,255,0.4)', marginTop:6 }}>
+            <span>θ_opt = {homodyneCurve.bestTheta.toFixed(1)}°</span>
+            <span>SNR_max = {homodyneCurve.bestSNR.toFixed(3)}</span>
+          </div>
         </section>
       </div>
 
@@ -357,6 +407,92 @@ const SensitivityCanvas = ({ data, currentR, optR }) => {
     ctx.fillStyle='rgba(45,212,168,0.5)'; ctx.fillText('● Optimal',w-pad.r-80,pad.t+60);
   }, [data, currentR, optR]);
   return <canvas ref={canvasRef} style={{ width:'100%', height:150, borderRadius:'var(--radius-md)' }} />;
+};
+
+/** FDS Canvas — frequency-dependent squeezing rotation */
+const FDSCanvas = ({ data }) => {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const cw = canvas.offsetWidth * 2, ch = 260; canvas.width = cw; canvas.height = ch;
+    const pad = { l: 50, r: 20, t: 15, b: 35 }, pw = cw - pad.l - pad.r, ph = ch - pad.t - pad.b;
+    ctx.clearRect(0, 0, cw, ch);
+    if (data.length === 0) return;
+    const toX = (f) => pad.l + (Math.log10(f) / 4) * pw;
+    const toY = (a) => pad.t + ph * (1 - a / 90);
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    [1, 10, 100, 1000, 10000].forEach(f => { const x = toX(f); ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ph); ctx.stroke(); });
+    [0, 30, 60, 90].forEach(a => { const y = toY(a); ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke(); });
+    // Labels
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = `${Math.max(12, cw / 45)}px monospace`;
+    [1, 10, 100, '1k', '10k'].forEach((l, i) => { ctx.textAlign = 'center'; ctx.fillText(String(l), toX(Math.pow(10, i)), ch - 8); });
+    [0, 30, 60, 90].forEach(a => { ctx.textAlign = 'right'; ctx.fillText(a + '°', pad.l - 4, toY(a) + 4); });
+    ctx.fillText('Freq (Hz)', pad.l + pw / 2, ch - 1);
+    // Rotation angle curve
+    ctx.strokeStyle = 'rgba(79,156,249,0.8)'; ctx.lineWidth = 2.5; ctx.shadowColor = 'rgba(79,156,249,0.3)'; ctx.shadowBlur = 8;
+    ctx.beginPath();
+    data.forEach((p, i) => { const x = toX(p.f), y = toY(p.angle); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+    ctx.stroke(); ctx.shadowBlur = 0;
+    // Effective squeezing overlay (secondary axis hint)
+    ctx.strokeStyle = 'rgba(45,212,168,0.4)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    data.forEach((p, i) => { const x = toX(p.f); const y = pad.t + ph * (1 - (p.effR + 3) / 6); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+    ctx.stroke(); ctx.setLineDash([]);
+    // Legend
+    ctx.font = `${Math.max(11, cw / 50)}px monospace`;
+    ctx.fillStyle = 'rgba(79,156,249,0.7)'; ctx.fillText('— θ_rot', cw - pad.r - 70, pad.t + 14);
+    ctx.fillStyle = 'rgba(45,212,168,0.5)'; ctx.fillText('- - r_eff', cw - pad.r - 70, pad.t + 28);
+  }, [data]);
+  return <canvas ref={canvasRef} style={{ width: '100%', height: 130, borderRadius: 'var(--radius-md)' }} />;
+};
+
+/** Homodyne SNR Canvas — sweeps readout angle 0→π and marks optimum */
+const HomodyneCanvas = ({ data }) => {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const cw = canvas.offsetWidth * 2, ch = 260; canvas.width = cw; canvas.height = ch;
+    const pad = { l: 50, r: 20, t: 15, b: 35 }, pw = cw - pad.l - pad.r, ph = ch - pad.t - pad.b;
+    ctx.clearRect(0, 0, cw, ch);
+    const pts = data.pts;
+    if (pts.length === 0) return;
+    const maxSNR = Math.max(...pts.map(p => p.snr), 0.01);
+    const toX = (deg) => pad.l + (deg / 180) * pw;
+    const toY = (s) => pad.t + ph * (1 - s / maxSNR);
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    [0, 45, 90, 135, 180].forEach(d => { const x = toX(d); ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ph); ctx.stroke(); });
+    // Labels
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = `${Math.max(12, cw / 45)}px monospace`; ctx.textAlign = 'center';
+    [0, 45, 90, 135, 180].forEach(d => ctx.fillText(d + '°', toX(d), ch - 8));
+    ctx.fillText('Readout angle θ', pad.l + pw / 2, ch - 1);
+    ctx.textAlign = 'right';
+    ctx.fillText(maxSNR.toFixed(2), pad.l - 4, pad.t + 4);
+    ctx.fillText('0', pad.l - 4, pad.t + ph + 4);
+    // SNR curve
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2.5; ctx.shadowColor = 'rgba(255,255,255,0.3)'; ctx.shadowBlur = 8;
+    ctx.beginPath();
+    pts.forEach((p, i) => { const x = toX(p.theta), y = toY(p.snr); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+    ctx.stroke(); ctx.shadowBlur = 0;
+    // Fill under curve
+    ctx.beginPath(); ctx.moveTo(toX(0), toY(0));
+    pts.forEach(p => ctx.lineTo(toX(p.theta), toY(p.snr)));
+    ctx.lineTo(toX(180), toY(0)); ctx.closePath();
+    const grd = ctx.createLinearGradient(0, pad.t, 0, pad.t + ph);
+    grd.addColorStop(0, 'rgba(255,255,255,0.08)'); grd.addColorStop(1, 'rgba(255,255,255,0.01)');
+    ctx.fillStyle = grd; ctx.fill();
+    // Optimal marker
+    const ox = toX(data.bestTheta), oy = toY(data.bestSNR);
+    ctx.beginPath(); ctx.arc(ox, oy, 7, 0, Math.PI * 2); ctx.fillStyle = '#2dd4a8'; ctx.fill();
+    ctx.strokeStyle = 'rgba(45,212,168,0.4)'; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(ox, pad.t); ctx.lineTo(ox, pad.t + ph); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(45,212,168,0.7)'; ctx.font = `${Math.max(12, cw / 50)}px monospace`;
+    ctx.textAlign = 'left'; ctx.fillText(`θ_opt=${data.bestTheta.toFixed(1)}°`, ox + 10, oy - 6);
+  }, [data]);
+  return <canvas ref={canvasRef} style={{ width: '100%', height: 130, borderRadius: 'var(--radius-md)' }} />;
 };
 
 export default QuantumPanel;

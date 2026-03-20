@@ -205,10 +205,10 @@ const SceneManager = () => {
     const animateCount = Math.min(5, n);
     const instantCount = n - animateCount;
     if (instantCount > 0) {
-      let d1 = 0, d2 = 0;
-      for (let i = 0; i < instantCount; i++) {
-        if (Math.random() < effectiveP1) d1++; else d2++;
-      }
+      // Deterministic Binomial Expected-Value split — eliminates
+      // stochastic variance on small N that causes apparent physics mismatches
+      const d1 = Math.round(instantCount * effectiveP1);
+      const d2 = instantCount - d1;
       // Batch update store
       const store = useSimulationStore.getState();
       useSimulationStore.setState({
