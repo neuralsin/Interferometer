@@ -222,7 +222,7 @@ const ComponentToolbar = () => {
   const iType = useSimulationStore((s) => s.interferometerType);
   const items = iType === 'mzi' ? [...MZI_TOOLBAR, ...SHARED_TOOLBAR] : SHARED_TOOLBAR;
   return (
-    <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, display: 'flex', gap: 6 }}>
+    <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', gap: 6 }}>
       {items.map(item => (
         <ToolbarBtn key={item.label} {...item} setParam={setParam} />
       ))}

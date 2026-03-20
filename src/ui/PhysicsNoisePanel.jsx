@@ -247,8 +247,8 @@ const PhysicsNoisePanel = () => {
       // Fixed dB window — prevents stretching to infinity when linewidth changes
       const allDB = points.map(p => p.psdDB).filter(d => isFinite(d));
       const peakDB = Math.max(...allDB);
-      // Always show a 60 dB range below peak, clamped to reasonable values
-      const yMax = Math.min(100, Math.max(0, Math.ceil(peakDB / 10) * 10 + 5));
+      // Always show a 65 dB range below peak, naturally floating
+      const yMax = Math.min(200, Math.ceil(peakDB / 10) * 10 + 5);
       const yMin = yMax - 65;
       const toX = (f) => pad.left + (Math.log10(f / fMin) / Math.log10(fMax / fMin)) * plotW;
       const toY = (db) => {

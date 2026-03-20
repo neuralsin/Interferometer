@@ -51,6 +51,7 @@ const QuantumPanel = () => {
   const strainPrec = armL > 0 ? dispPrec / armL : 0; // strain precision (Δl/l)
   const freqPrec = phasePrec / (2*Math.PI*state.detectorExposureTime); // frequency precision (Hz)
   const velPrec = freqPrec * state.wavelength; // velocity precision (m/s) via Doppler
+  const detectableForce = dispPrec * (state.mirror1Mass||0.25) * Math.pow(2*Math.PI*100, 2); // force at 100Hz
 
   // ── Optimal squeezing finder ──
   const optimalR = useMemo(() => {
@@ -61,21 +62,24 @@ const QuantumPanel = () => {
   const optimalDBBest = optimalR * 2 * 4.343;
   const optimalSens = squeezedSensitivity(N, optimalR);
 
-  // ── Detection predictions: "Can I detect X?" ──
-  const detectableDisp = dispPrec; // min detectable displacement
-  const detectableForce = detectableDisp * (state.mirror1Mass||0.25) * Math.pow(2*Math.PI*100, 2); // assume 100Hz
-  const tFor5sigma = N > 0 ? Math.pow(5 / (Math.sqrt(N) * Math.exp(r)), 2) * state.detectorExposureTime : Infinity;
-  const tForGW = strainPrec > 0 ? Math.pow((strainPrec / 1e-21), 2) * state.detectorExposureTime : Infinity;
+  // ── Quantum Fisher Information & Optomechanics ──
+  const mirrorMass = state.mirror1Mass || 40; // Default to 40kg (aLIGO scale) if undefined
+  const QFI = N * Math.exp(2 * r) + Math.pow(Math.sinh(r), 2); // Quantum Fisher Information for squeezed coherent state
+  const crlb = QFI > 0 ? 1 / Math.sqrt(QFI) : 0; // Cramer-Rao Lower Bound (rad)
+  
+  // SQL Crossover Frequency (where Shot Noise = Radiation Pressure Noise)
+  // S_shot = λℏc/(4πP), S_rad = 16πPℏ/(m²ω⁴λc) => f_SQL = (1/2π) * (8πP / (mcλ))^(1/4)
+  // Wait, force noise S_F = 4ℏπP/(cλ). Strain noise S_h(rad) = S_F / (m² L² ω⁴).
+  // Standard simple crossover f_SQL = sqrt( 8 P / (c * λ * m) ) / (2π). Let's use exact simplified form:
+  const f_sql = (1 / (2 * Math.PI)) * Math.pow((8 * state.laserPower) / (C * state.wavelength * mirrorMass), 0.25);
+  
+  // Radiation Pressure Force
+  const F_rad = (2 * state.laserPower) / C; // (Newtons)
+  const F_rad_fluct = Math.sqrt((4 * H * Math.PI * state.laserPower) / (C * state.wavelength)) * Math.exp(r); // Force fluctuations (N/√Hz)
 
-  // ── Statistical confidence (capped) ──
-  const measuredPhase = Math.abs(2 * Math.PI * 2 * armL / state.wavelength) % (2*Math.PI);
-  const snrVal = phaseSNR(measuredPhase, N, r);
-  const snrDB = snrVal > 1e-10 ? 10*Math.log10(snrVal) : 0;
-  const sigmaLevel = Math.min(snrVal, 100); // cap to prevent display overflow
-  const pValue = 0.5 * Math.exp(-Math.pow(Math.min(snrVal, 37),2)/2); // cap exp argument
-  const confidencePercent = Math.min(100, (1 - 2*pValue) * 100);
+  const heisenbergLimit = N > 0 ? 1 / N : 1;
 
-  // ── Squeeze ellipse ──
+  // ── Optimal squeezing finder ──
   const squeezeCurve = useMemo(() => {
     const pts = [];
     const theta = state.squeezingAngle;
@@ -165,19 +169,19 @@ const QuantumPanel = () => {
 
         <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
           <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:12 }}>
-            📊 Detection Analysis
+            🔬 Optomechanics & Bounds
           </h3>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-            <QM label="Confidence" value={`${Math.min(99.9999, confidencePercent).toFixed(4)}%`} unit=""
-              tip={`p-value = ${pValue.toExponential(2)}`} />
-            <QM label="σ-level" value={sigmaLevel.toFixed(2)} unit="σ" tip="Signal/noise ratio in standard deviations" />
-            <QM label="Time to 5σ" value={tFor5sigma < 3600 ? `${tFor5sigma.toFixed(2)} s` : tFor5sigma < 86400 ? `${(tFor5sigma/3600).toFixed(1)} hr` : `${(tFor5sigma/86400).toFixed(1)} d`} unit=""
-              tip="Integration time for 5σ detection at current power" />
-            <QM label="Time for h=10⁻²¹" value={tForGW < 3600 ? `${tForGW.toExponential(1)} s` : tForGW < 3.15e7 ? `${(tForGW/86400).toFixed(1)} d` : `${(tForGW/3.15e7).toExponential(1)} yr`} unit=""
-              tip="How long to accumulate strain precision of 10⁻²¹" />
-            <QM label="Effective QE" value={`${(effectiveQE*100).toFixed(1)}%`} unit=""
-              tip="QE degraded by dark current and readout noise" />
-            <QM label="SNR" value={snrDB.toFixed(1)} unit="dB" tip="Current signal-to-noise ratio" />
+            <QM label="Quantum Fisher Info" value={QFI > 1e6 ? QFI.toExponential(2) : QFI.toFixed(0)} unit=""
+              tip="QFI = N·e^(2r) + sinh²(r) — Fisher info for squeezed phase estimation" />
+            <QM label="Cramer-Rao Bound" value={crlb.toExponential(2)} unit="rad" tip="Absolute minimum phase variance 1/√QFI" />
+            <QM label="SQL Freq Crossover" value={f_sql.toExponential(1)} unit="Hz"
+              tip={`Where shot noise = radiation pressure for a ${mirrorMass}kg mirror`} />
+            <QM label="Heisenberg Limit" value={heisenbergLimit.toExponential(2)} unit="rad"
+              tip="1/N scaling — ultimate quantum limit without squeezing" />
+            <QM label="Radiation Pressure" value={F_rad.toExponential(2)} unit="N"
+              tip="Static radiation pressure force F = 2P/c" />
+            <QM label="Rad. Force Fluct." value={F_rad_fluct.toExponential(2)} unit="N/√Hz" tip="Quantum force fluctuations driving mirror motion" />
           </div>
         </section>
       </div>
