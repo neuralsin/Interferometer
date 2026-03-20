@@ -146,7 +146,10 @@ const PhysicsNoisePanel = () => {
       const zRVal = Math.PI * w0 * w0 / state.wavelength;
       // Scale: map ±3*zR to canvas width
       const zRange = 3 * zRVal;
-      const waistPixels = Math.max(8, Math.min(h * 0.3, (w0 / (w0 * 4)) * h * 0.3));
+      // Make waist thickness visibly react to slider (scaled by square root to compress 5000x dynamic range)
+      const basePixels = h * 0.05;
+      const dynamicPixels = Math.pow(w0 / 500e-6, 0.5) * (h * 0.25);
+      const waistPixels = basePixels + dynamicPixels;
 
       const midH = h / 2;
       const waistX = w / 2;
@@ -193,11 +196,13 @@ const PhysicsNoisePanel = () => {
       ctx.fillStyle = 'rgba(79,156,249,0.5)'; ctx.font = `${Math.max(10, w * 0.02)}px monospace`; ctx.textAlign = 'left';
       ctx.fillText('w₀', waistX + 4, midH - waistPixels - 4);
 
-      // Z axis labels
-      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = `${Math.max(9, w * 0.015)}px monospace`; ctx.textAlign = 'center';
-      ctx.fillText('-z_R', w * 0.25, h - 6);
-      ctx.fillText('0', waistX, h - 6);
-      ctx.fillText('+z_R', w * 0.75, h - 6);
+      // Z axis labels — actively displaying zR
+      const formatZ = (m) => m < 0.01 ? `${(m*1e3).toFixed(1)}mm` : `${m.toFixed(2)}m`;
+      const zrStr = formatZ(zRVal);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = `${Math.max(9, w * 0.015)}px monospace`; ctx.textAlign = 'center';
+      ctx.fillText(`-${zrStr}`, w * 0.25, h - 6);
+      ctx.fillText('z=0', waistX, h - 6);
+      ctx.fillText(`+${zrStr}`, w * 0.75, h - 6);
 
       // Formula
       ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = `${Math.max(8, w * 0.013)}px monospace`; ctx.textAlign = 'left';
