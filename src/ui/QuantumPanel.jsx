@@ -231,48 +231,72 @@ const QuantumPanel = () => {
 
       {/* ═══ BOTTOM: Graphs + Controls ═══ */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-        {/* Phase Space */}
-        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
-          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Wigner Phase Space</h3>
-          <PhaseSpaceCanvas squeezeCurve={squeezeCurve} r={r} theta={state.squeezingAngle} />
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:10 }}>
-            <SliderControl label="Squeezing (dB)" unit="dB"
-              value={sqzDB} min={0} max={26} step={0.1}
-              onChange={(dB) => setParam('squeezingParam', dB / (2 * 4.343))}
-              formatValue={(v) => v.toFixed(1)}
-              formula="r = dB/(2×4.343)  |  Δφ = e^(-r)/√N" />
-            <SliderControl label="Angle (θ)" unit="°"
-              value={state.squeezingAngle * 180 / Math.PI} min={0} max={360} step={1}
-              onChange={(deg) => setParam('squeezingAngle', deg * Math.PI / 180)}
-              formatValue={(v) => v.toFixed(0)}
-              formula="Rotation in X₁-X₂ phase space" />
-          </div>
-        </section>
+        
+        {/* Left Column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Phase Space */}
+          <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
+            <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Wigner Phase Space</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'min-content 1fr', gap: 16, alignItems: 'center' }}>
+              <div style={{ width: 140 }}>
+                <PhaseSpaceCanvas squeezeCurve={squeezeCurve} r={r} theta={state.squeezingAngle} />
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                <SliderControl label="Squeezing (dB)" unit="dB"
+                  value={sqzDB} min={0} max={26} step={0.1}
+                  onChange={(dB) => setParam('squeezingParam', dB / (2 * 4.343))}
+                  formatValue={(v) => v.toFixed(1)}
+                  formula="r = dB/(2×4.343)  |  Δφ = e^(-r)/√N" />
+                <SliderControl label="Angle (θ)" unit="°"
+                  value={state.squeezingAngle * 180 / Math.PI} min={0} max={360} step={1}
+                  onChange={(deg) => setParam('squeezingAngle', deg * Math.PI / 180)}
+                  formatValue={(v) => v.toFixed(0)}
+                  formula="Rotation in X₁-X₂ phase space" />
+              </div>
+            </div>
+          </section>
 
-        {/* Sensitivity curve */}
-        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
-          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Phase Sensitivity vs Squeezing</h3>
-          <SensitivityCanvas data={sensCurve} currentR={r} optR={optimalR} />
-        </section>
-      </div>
+          {/* Freq-Dependent Squeezing */}
+          <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Freq-Dependent Squeezing</h3>
+            <div style={{ flex: 1, position: 'relative', minHeight: 130 }}>
+              <div style={{ position: 'absolute', inset: 0 }}>
+                <FDSCanvas data={fdsCurve} />
+              </div>
+            </div>
+            <div style={{ fontSize:7, fontFamily:'var(--font-mono)', color:'rgba(255,255,255,0.3)', marginTop:6 }}>
+              θ(f) = arctan(f/f_cc) | f_cc = 50Hz filter cavity pole
+            </div>
+          </section>
+        </div>
 
-      {/* ═══ NEW: FDS + Homodyne Optimizer ═══ */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
-          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Freq-Dependent Squeezing</h3>
-          <FDSCanvas data={fdsCurve} />
-          <div style={{ fontSize:7, fontFamily:'var(--font-mono)', color:'rgba(255,255,255,0.3)', marginTop:6 }}>
-            θ(f) = arctan(f/f_cc) | f_cc = 50Hz filter cavity pole
-          </div>
-        </section>
-        <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16 }}>
-          <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Homodyne SNR Optimizer</h3>
-          <HomodyneCanvas data={homodyneCurve} />
-          <div style={{ display:'flex', justifyContent:'space-between', fontSize:8, fontFamily:'var(--font-mono)', color:'rgba(255,255,255,0.4)', marginTop:6 }}>
-            <span>θ_opt = {homodyneCurve.bestTheta.toFixed(1)}°</span>
-            <span>SNR_max = {homodyneCurve.bestSNR.toFixed(3)}</span>
-          </div>
-        </section>
+        {/* Right Column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Sensitivity curve */}
+          <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Phase Sensitivity vs Squeezing</h3>
+            <div style={{ flex: 1, position: 'relative', minHeight: 150 }}>
+              <div style={{ position: 'absolute', inset: 0 }}>
+                <SensitivityCanvas data={sensCurve} currentR={r} optR={optimalR} />
+              </div>
+            </div>
+          </section>
+
+          {/* Homodyne SNR Optimizer */}
+          <section className="glass-card" style={{ borderRadius:'var(--radius-high)', padding:16, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <h3 className="label-micro" style={{ letterSpacing:'0.2em', marginBottom:10 }}>Homodyne SNR Optimizer</h3>
+            <div style={{ flex: 1, position: 'relative', minHeight: 130 }}>
+              <div style={{ position: 'absolute', inset: 0 }}>
+                <HomodyneCanvas data={homodyneCurve} />
+              </div>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:8, fontFamily:'var(--font-mono)', color:'rgba(255,255,255,0.4)', marginTop:6 }}>
+              <span>θ_opt = {homodyneCurve.bestTheta.toFixed(1)}°</span>
+              <span>SNR_max = {homodyneCurve.bestSNR.toFixed(3)}</span>
+            </div>
+          </section>
+        </div>
+
       </div>
 
       {/* Formulas */}
