@@ -117,14 +117,14 @@ export default function SagnacScene() {
       waveTRef.current += dtS * 2;
       const waveT = waveTRef.current;
 
-      // Slow sinusoidal Omega animation — period ≈ 120s
+      // Slow sinusoidal Omega animation
       let currentOmega = st.sagnacOmega;
       if (animRef.current) {
-        currentOmega = Math.sin(waveT * 0.052) * 2;
-        // Throttle global React state updates to 5Hz (every 200ms) to prevent UI lag
-        if (!window.sagnacLastOmegaTs || (ts - window.sagnacLastOmegaTs > 200)) {
+        currentOmega = Math.sin(waveT * 0.005) * 2;
+        // Throttle React state to 10Hz — canvas uses local currentOmega at 60fps
+        if (!window.sagnacLastOmegaTs || (ts - window.sagnacLastOmegaTs > 100)) {
           window.sagnacLastOmegaTs = ts;
-          st.setParam('sagnacOmega', parseFloat(currentOmega.toFixed(4)));
+          st.setParam('sagnacOmega', parseFloat(currentOmega.toFixed(6)));
         }
       }
 

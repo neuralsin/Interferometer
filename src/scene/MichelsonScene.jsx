@@ -39,11 +39,12 @@ const MichelsonScene = () => {
   // photon particle: progresses 0→1 along the beam path, then resets
   const photonRef = useRef({ t: 0, arm: 0 }); // arm 0=M1, arm 1=M2
   const paramAnimRef = useRef({ active: false, mode: '', val: 0, dir: 1 });
+  const lastParamPush = useRef(0); // throttle React state updates
   const [wavesOn, setWavesOn] = useState(true);
   const [animMode, setAnimMode] = useState('');
 
-  // Slow toggle: step constants are 20x slower than original
-  const ANIM_STEP = { p: 0.0006, t: 0.00015, m: 0.005 };
+  // Ultra-slow toggle: step constants are 100x slower than original for readable trace
+  const ANIM_STEP = { p: 0.000006, t: 0.0000015, m: 0.00005 };
 
   const toggleParamAnim = useCallback((mode) => {
     const pa = paramAnimRef.current;
@@ -91,22 +92,27 @@ const MichelsonScene = () => {
       waveTRef.current += dtS * st.waveAnimSpeed * 4;
       const waveT = waveTRef.current;
 
-      // Parameter animation — slow increments each second
+      // Parameter animation — local value updates every frame (60fps smooth canvas)
+      // but React state pushes throttled to 10Hz to prevent BottomBar re-render storm
       const pa = paramAnimRef.current;
       if (pa.active) {
         if (pa.mode === 'p') {
           pa.val = Math.max(0.1, Math.min(10, pa.val + ANIM_STEP.p * dtMs));
           if (pa.val >= 10) pa.val = 0.1;
-          st.setParam('gasCellPressure', parseFloat(pa.val.toFixed(4)));
         } else if (pa.mode === 't') {
           pa.val = Math.max(0, Math.min(5, pa.val + ANIM_STEP.t * dtMs));
           if (pa.val >= 5) pa.val = 0;
-          st.setParam('mirrorTilt', parseFloat(pa.val.toFixed(4)));
         } else if (pa.mode === 'm') {
           pa.val += ANIM_STEP.m * dtMs * pa.dir;
           if (pa.val >= 50) { pa.val = 50; pa.dir = -1; }
           if (pa.val <= -50) { pa.val = -50; pa.dir = 1; }
-          st.setParam('mirrorDisplacement', parseFloat(pa.val.toFixed(3)));
+        }
+        // Push to React store at 10Hz (every ~100ms) — prevents 60fps re-render cascade
+        if (ts - lastParamPush.current > 100) {
+          lastParamPush.current = ts;
+          if (pa.mode === 'p') st.setParam('gasCellPressure', parseFloat(pa.val.toFixed(6)));
+          else if (pa.mode === 't') st.setParam('mirrorTilt', parseFloat(pa.val.toFixed(6)));
+          else st.setParam('mirrorDisplacement', parseFloat(pa.val.toFixed(6)));
         }
       }
 

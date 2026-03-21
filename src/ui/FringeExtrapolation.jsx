@@ -8,22 +8,17 @@ import { wavelengthToColor } from '../physics/basicInterference.js';
  * Detector Intensity I(t) — Live oscilloscope trace
  *
  * Reads the actual physics state every frame via computeOPD(),
- * and plots the real detector intensity synced to the simulation.
+ * and plots the real detector intensity synced 1:1 to the simulation.
  *
  * Left:  real circular interferogram (pixel-by-pixel from OPD + tilt)
+ *        colored to the laser wavelength
  * Right: scrolling time series of I(t) — exactly what the detector sees
- *
- * The graph is synced to the simulation: it only advances when parameters
- * change (via Animate buttons, slider dragging, or noise perturbations).
- * When nothing changes, the line stays flat — which is physically correct.
+ *        colored to the laser wavelength
  *
  * Zero placeholder data. Every value is computed from real simulation state.
  */
 
 const HISTORY_LEN = 240;
-
-// Exponential moving average for smooth, anti-aliased trace
-const EMA_ALPHA = 0.15;
 
 const FringeExtrapolation = () => {
   const canvasRef = useRef(null);
@@ -31,8 +26,7 @@ const FringeExtrapolation = () => {
   const historyRef = useRef(new Float64Array(HISTORY_LEN).fill(0.5));
   const writeIdx = useRef(0);
   const frameCount = useRef(0);
-  const lastOPD = useRef(null);
-  const smoothedI = useRef(0.5);
+  const initialised = useRef(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -61,45 +55,34 @@ const FringeExtrapolation = () => {
       frameCount.current++;
       const ctx = canvas.getContext('2d');
 
-      // ── REAL PHYSICS: compute current detector intensity ──
+      // ── REAL PHYSICS ──
       const opdResult = computeOPD(st);
       const opd = opdResult.opd;
       const k = (2 * Math.PI) / st.wavelength;
       const V = fringeVisibility(opd, st.laserLinewidth);
       const tiltRad = opdResult.tiltRad || 0;
 
-      // Use the correct phase for each interferometer type
+      // Correct phase per interferometer type
       let totalPhase;
       if (st.interferometerType === 'sagnac' && opdResult.sagnacPhase != null) {
-        // Sagnac: rotational phase from the Sagnac effect
         totalPhase = opdResult.sagnacPhase;
       } else if (st.interferometerType === 'mzi') {
-        // MZI: include user phase shifters
         totalPhase = k * opd + (st.phaseShift1 || 0) - (st.phaseShift2 || 0);
       } else {
-        // Michelson: standard OPD phase
         totalPhase = k * opd;
       }
 
-      // Central intensity: I = ½(1 + V·cos(phase))
-      const I_raw = 0.5 * (1 + V * Math.cos(totalPhase));
+      // Central intensity — NO smoothing, direct physics
+      const I_center = 0.5 * (1 + V * Math.cos(totalPhase));
 
-      // Anti-alias: exponential moving average to sync graph speed
-      // to the rate parameters actually change (prevents aliased noise)
-      smoothedI.current = EMA_ALPHA * I_raw + (1 - EMA_ALPHA) * smoothedI.current;
-      const I_center = smoothedI.current;
-
-      // Initialize on first frame
-      if (lastOPD.current === null) {
-        lastOPD.current = opd;
-        smoothedI.current = I_raw;
-        historyRef.current.fill(I_raw);
+      // Init buffer to current value on first frame
+      if (!initialised.current) {
+        initialised.current = true;
+        historyRef.current.fill(I_center);
       }
-      lastOPD.current = opd;
 
-      // Push to rolling buffer every 4 frames (~15 Hz — keeps the graph
-      // in sync with human-visible simulation speed, not 60fps noise)
-      if (frameCount.current % 4 === 0) {
+      // Push to rolling buffer every 2 frames (~30 Hz — direct, no EMA lag)
+      if (frameCount.current % 2 === 0) {
         historyRef.current[writeIdx.current % HISTORY_LEN] = I_center;
         writeIdx.current++;
       }
@@ -121,16 +104,14 @@ const FringeExtrapolation = () => {
       ctx.clearRect(0, 0, W, H);
 
       // ── WAVELENGTH COLOR ──
-      // wavelengthToColor takes wavelength in SI meters, returns hex string
+      // wavelengthToColor(meters) returns hex string like '#ff0000'
       const wlHex = wavelengthToColor(st.wavelength);
-      // Parse hex to RGB for canvas operations
       const hexR = parseInt(wlHex.slice(1, 3), 16);
       const hexG = parseInt(wlHex.slice(3, 5), 16);
       const hexB = parseInt(wlHex.slice(5, 7), 16);
-      // Use wavelength color for the wave trace; interferogram uses type colors
-      const waveR = hexR, waveG = hexG, waveB = hexB;
 
-      // ── 1. GENERATOR: Real circular fringe pattern ──
+      // ── 1. GENERATOR: Real circular interferogram ──
+      // Colored to the laser wavelength (not hardcoded per-type)
       ctx.save();
       ctx.beginPath();
       ctx.arc(genCX, genCY, genR, 0, Math.PI * 2);
@@ -139,7 +120,7 @@ const FringeExtrapolation = () => {
       const imgSize = Math.ceil(genR * 2);
       if (imgSize > 2) {
         const step = 2;
-        const detectorSize = 0.01; // 10 mm detector aperture
+        const detectorSize = 0.01;
         const scale = detectorSize / imgSize;
 
         for (let py = 0; py < imgSize; py += step) {
@@ -161,21 +142,10 @@ const FringeExtrapolation = () => {
             const pixelPhase = totalPhase + tiltPhase + curvature;
             const pixelI = 0.5 * (1 + V * Math.cos(pixelPhase));
 
-            // Type-specific colors for the interferogram disc
-            let r, g, b;
-            if (st.interferometerType === 'michelson') {
-              r = Math.round(pixelI * 57);
-              g = Math.round(pixelI * 255);
-              b = Math.round(pixelI * 20);
-            } else if (st.interferometerType === 'sagnac') {
-              r = Math.round(pixelI * 255);
-              g = Math.round(pixelI * 180);
-              b = Math.round(pixelI * 50);
-            } else {
-              r = Math.round(pixelI * 79);
-              g = Math.round(pixelI * 200);
-              b = Math.round(pixelI * 249);
-            }
+            // Wavelength-synced color: bright = laser color, dark = black
+            const r = Math.round(pixelI * hexR);
+            const g = Math.round(pixelI * hexG);
+            const b = Math.round(pixelI * hexB);
 
             ctx.fillStyle = `rgb(${r},${g},${b})`;
             ctx.fillRect(
@@ -194,7 +164,7 @@ const FringeExtrapolation = () => {
       ctx.arc(genCX, genCY, genR, 0, Math.PI * 2);
       ctx.stroke();
 
-      // ── Connecting line from generator to graph ──
+      // ── Connecting line ──
       const currentY = graphB - I_center * graphH;
       ctx.beginPath();
       ctx.setLineDash([3, 3]);
@@ -207,7 +177,7 @@ const FringeExtrapolation = () => {
 
       // ── 2. SWEEPING GRAPH ──
 
-      // Y-axis grid lines
+      // Grid
       ctx.strokeStyle = 'rgba(255,255,255,0.04)';
       ctx.lineWidth = 0.5;
       for (let i = 0; i <= 4; i++) {
@@ -218,7 +188,7 @@ const FringeExtrapolation = () => {
         ctx.stroke();
       }
 
-      // Y-axis labels
+      // Y labels
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
       ctx.font = '7px monospace';
       ctx.textAlign = 'right';
@@ -226,7 +196,7 @@ const FringeExtrapolation = () => {
       ctx.fillText('0.5', graphL - 3, graphT + graphH / 2 + 3);
       ctx.fillText('0.0', graphL - 3, graphB + 3);
 
-      // X-axis label
+      // X label
       ctx.textAlign = 'center';
       ctx.fillText('t →', graphL + graphW / 2, graphB + 12);
 
@@ -238,7 +208,10 @@ const FringeExtrapolation = () => {
       ctx.fillText('I(t)', 0, 0);
       ctx.restore();
 
-      // Draw filled area under curve
+      // Wave trace — wavelength color
+      const waveR = hexR, waveG = hexG, waveB = hexB;
+
+      // Filled area
       ctx.beginPath();
       const readStart = writeIdx.current;
       for (let i = 0; i < HISTORY_LEN; i++) {
@@ -258,7 +231,7 @@ const FringeExtrapolation = () => {
       ctx.fillStyle = fillGrad;
       ctx.fill();
 
-      // Draw the wave line on top
+      // Line
       ctx.beginPath();
       for (let i = 0; i < HISTORY_LEN; i++) {
         const idx = (readStart + i) % HISTORY_LEN;
@@ -274,7 +247,7 @@ const FringeExtrapolation = () => {
       ctx.lineCap = 'round';
       ctx.stroke();
 
-      // Glow line
+      // Glow
       ctx.beginPath();
       for (let i = 0; i < HISTORY_LEN; i++) {
         const idx = (readStart + i) % HISTORY_LEN;
@@ -288,7 +261,7 @@ const FringeExtrapolation = () => {
       ctx.lineWidth = 5;
       ctx.stroke();
 
-      // Leading edge dot
+      // Leading dot
       const lastIdx = (readStart + HISTORY_LEN - 1) % HISTORY_LEN;
       const lastVal = historyRef.current[lastIdx];
       const dotX = graphR;
@@ -302,7 +275,7 @@ const FringeExtrapolation = () => {
       ctx.arc(dotX, dotY, 6, 0, Math.PI * 2);
       ctx.fill();
 
-      // Current value label
+      // Value label
       ctx.fillStyle = `rgba(${waveR},${waveG},${waveB},0.9)`;
       ctx.font = '600 8px monospace';
       ctx.textAlign = 'left';
