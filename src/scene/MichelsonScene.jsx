@@ -16,8 +16,8 @@ import useSimulationStore from '../store/simulationStore.js';
 
 const GAS_DATA = {
   air: { n0: 293e-6, color: [55, 138, 221], label: 'Air' },
-  he:  { n0: 35e-6,  color: [29, 158, 117], label: 'Helium' },
-  ar:  { n0: 281e-6, color: [216, 90, 48],  label: 'Argon' },
+  he: { n0: 35e-6, color: [29, 158, 117], label: 'Helium' },
+  ar: { n0: 281e-6, color: [216, 90, 48], label: 'Argon' },
 };
 
 function lambdaToRGB(nm) {
@@ -138,7 +138,7 @@ const MichelsonScene = () => {
       let intensitySum = 0;
       const N_STEPS = 32;
       for (let si = 0; si < N_STEPS; si++) {
-        const x = -detSize/2 + (si / (N_STEPS-1)) * detSize;
+        const x = -detSize / 2 + (si / (N_STEPS - 1)) * detSize;
         const localOPD = gOPD + mOPD + 2 * tiltRad * x;
         const localPhase = k * localOPD;
         intensitySum += Math.cos(localPhase / 2) ** 2;
@@ -263,49 +263,49 @@ const MichelsonScene = () => {
       let phX1, phY1;
       if (m1On) {
         const pathPts1 = [
-          {x: laserX + 32, y: laserY},
-          {x: bsX, y: bsY},
-          {x: m1X, y: m1Y + 12},
-          {x: bsX, y: bsY},
-          {x: detX, y: detY - 18},
+          { x: laserX + 32, y: laserY },
+          { x: bsX, y: bsY },
+          { x: m1X, y: m1Y + 12 },
+          { x: bsX, y: bsY },
+          { x: detX, y: detY - 18 },
         ];
         const totalSegs1 = pathPts1.length - 1;
         const segIdx1 = Math.min(totalSegs1 - 1, Math.floor(tVal * totalSegs1));
         const segT1 = (tVal * totalSegs1) - segIdx1;
-        phX1 = pathPts1[segIdx1].x + segT1 * (pathPts1[segIdx1+1].x - pathPts1[segIdx1].x);
-        phY1 = pathPts1[segIdx1].y + segT1 * (pathPts1[segIdx1+1].y - pathPts1[segIdx1].y);
+        phX1 = pathPts1[segIdx1].x + segT1 * (pathPts1[segIdx1 + 1].x - pathPts1[segIdx1].x);
+        phY1 = pathPts1[segIdx1].y + segT1 * (pathPts1[segIdx1 + 1].y - pathPts1[segIdx1].y);
       }
       // Ghost 2: Arm 2 (BS → Gas → M2 → Gas → BS → Detector)
       let phX2, phY2;
       if (m2On) {
         const pathPts2 = [
-          {x: laserX + 32, y: laserY},
-          {x: bsX, y: bsY},
-          {x: gasBoxX + gasBoxW / 2, y: bsY},
-          {x: m2X - 12, y: bsY},
-          {x: gasBoxX + gasBoxW / 2, y: bsY},
-          {x: bsX, y: bsY},
-          {x: detX, y: detY - 18},
+          { x: laserX + 32, y: laserY },
+          { x: bsX, y: bsY },
+          { x: gasBoxX + gasBoxW / 2, y: bsY },
+          { x: m2X - 12, y: bsY },
+          { x: gasBoxX + gasBoxW / 2, y: bsY },
+          { x: bsX, y: bsY },
+          { x: detX, y: detY - 18 },
         ];
         const totalSegs2 = pathPts2.length - 1;
         const segIdx2 = Math.min(totalSegs2 - 1, Math.floor(tVal * totalSegs2));
         const segT2 = (tVal * totalSegs2) - segIdx2;
-        phX2 = pathPts2[segIdx2].x + segT2 * (pathPts2[segIdx2+1].x - pathPts2[segIdx2].x);
-        phY2 = pathPts2[segIdx2].y + segT2 * (pathPts2[segIdx2+1].y - pathPts2[segIdx2].y);
+        phX2 = pathPts2[segIdx2].x + segT2 * (pathPts2[segIdx2 + 1].x - pathPts2[segIdx2].x);
+        phY2 = pathPts2[segIdx2].y + segT2 * (pathPts2[segIdx2 + 1].y - pathPts2[segIdx2].y);
       }
 
       // Draw both ghost particles (quantum superposition)
       const drawGhost = (phX, phY, alpha) => {
         if (phX === undefined) return;
         const phGrad = ctx.createRadialGradient(phX, phY, 0, phX, phY, 10);
-        phGrad.addColorStop(0, `rgba(${clr},${clg},${clb},${0.9*alpha})`);
-        phGrad.addColorStop(0.5, `rgba(${clr},${clg},${clb},${0.3*alpha})`);
+        phGrad.addColorStop(0, `rgba(${clr},${clg},${clb},${0.9 * alpha})`);
+        phGrad.addColorStop(0.5, `rgba(${clr},${clg},${clb},${0.3 * alpha})`);
         phGrad.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = phGrad;
         ctx.beginPath(); ctx.arc(phX, phY, 10, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = `rgba(255,255,255,${alpha})`;
         ctx.beginPath(); ctx.arc(phX, phY, 2, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = `rgba(${clr},${clg},${clb},${0.5*alpha})`;
+        ctx.fillStyle = `rgba(${clr},${clg},${clb},${0.5 * alpha})`;
         ctx.font = '600 7px sans-serif'; ctx.textAlign = 'center';
         ctx.fillText('γ', phX, phY - 12);
       };
@@ -361,11 +361,11 @@ const MichelsonScene = () => {
       ctx.fillText('Detector', detX, detY - 5);
       // Intensity readout ON detector
       ctx.fillStyle = `rgba(${detR},${detGc},${detB},0.8)`; ctx.font = '600 7px monospace';
-      ctx.fillText(`I=${(intensity*100).toFixed(0)}%`, detX, detY + 10);
+      ctx.fillText(`I=${(intensity * 100).toFixed(0)}%`, detX, detY + 10);
 
       // Top readout
       ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '500 9px sans-serif'; ctx.textAlign = 'left';
-      ctx.fillText(`λ=${Math.round(lamNm)}nm  spd=${baseSpeed.toFixed(1)}×  P=${(powerFactor*100).toFixed(0)}%`, 8, 14);
+      ctx.fillText(`λ=${Math.round(lamNm)}nm  spd=${baseSpeed.toFixed(1)}×  P=${(powerFactor * 100).toFixed(0)}%`, 8, 14);
       ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '8px monospace';
       ctx.fillText(`Δφ = ${(phMod / (2 * Math.PI)).toFixed(4)}λ`, W2 - 8, 14);
 
@@ -373,7 +373,7 @@ const MichelsonScene = () => {
       const legs = [
         { r: clr, g: clg, b: clb, l: 'Arm 1 — M1' },
         { r: cgr, g: cgg, b: cgb, l: 'Arm 2 — M2/gas' },
-        { r: Math.round((clr+cgr)/2), g: Math.round((clg+cgg)/2), b: Math.round((clb+cgb)/2), l: 'Recombined' },
+        { r: Math.round((clr + cgr) / 2), g: Math.round((clg + cgg) / 2), b: Math.round((clb + cgb) / 2), l: 'Recombined' },
       ];
       legs.forEach((lg, i) => {
         const lx = W2 - 115, ly = 26 + i * 13;
@@ -416,7 +416,7 @@ const MichelsonScene = () => {
           Michelson Interferometer
         </div>
         <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.2)', fontFamily: 'var(--font-mono)' }}>
-          {gas.label} · n={nVal2.toFixed(6)} · OPD={(totalOPD*1e9).toFixed(1)}nm
+          {gas.label} · n={nVal2.toFixed(6)} · OPD={(totalOPD * 1e9).toFixed(1)}nm
         </div>
       </div>
 

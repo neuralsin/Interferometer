@@ -5,6 +5,7 @@ import { generateFringePattern, wavelengthToColor } from '../physics/basicInterf
 import { fringeVisibility, coherenceLength } from '../physics/coherenceModel.js';
 import { photonCount, phaseSNR } from '../physics/quantumModel.js';
 import { computeSagnac } from '../physics/sagnacModel.js';
+import FringeExtrapolation from './FringeExtrapolation.jsx';
 
 /**
  * BottomBar (Research Mode)
@@ -241,30 +242,8 @@ const BottomBar = () => {
         </div>
       </div>
 
-      {/* Quantum State — live computed */}
-      <div className="glass-card" style={{ width: 260, borderRadius: 'var(--radius-high)', padding: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <h4 className="label-micro" style={{ marginBottom: 4, letterSpacing: '0.2em' }}>Quantum State</h4>
-        <div className="metric-card">
-          <span className="metric-label">Coherence:</span>
-          <span className="metric-value">{(visibility * 100).toFixed(2)}%</span>
-        </div>
-        <div className="metric-card">
-          <span className="metric-label">Coh. Length:</span>
-          <span className="metric-value">{cohLen < 1 ? `${(cohLen * 100).toFixed(1)} cm` : `${cohLen.toFixed(2)} m`}</span>
-        </div>
-        <div className="metric-card">
-          <span className="metric-label">SNR_dB:</span>
-          <span className="metric-value">{snrDB}</span>
-        </div>
-        <div className="metric-card">
-          <span className="metric-label">Photon N:</span>
-          <span className="metric-value">{N > 1e6 ? `${(N / 1e6).toFixed(1)}M` : N.toFixed(0)}</span>
-        </div>
-        <button className="btn-ghost" onClick={() => useSimulationStore.getState().resetToDefaults()}
-          style={{ marginTop: 'auto', width: '100%', justifyContent: 'center', fontSize: 8 }}>
-          Reset_Defaults
-        </button>
-      </div>
+      {/* Fringe Extrapolation — real-time interferogram trace */}
+      <FringeExtrapolation />
     </div>
   );
 };
