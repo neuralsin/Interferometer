@@ -86,8 +86,18 @@ const FringeExtrapolation = () => {
         totalPhase = k * opd;
       }
 
-      // Central intensity
+      // Central intensity (theoretical prediction)
       const I_center = 0.5 * (1 + V * Math.cos(totalPhase));
+
+      // For MZI: the theoretical I_center is CONSTANT (nothing sweeps the OPD).
+      // The only real changing signal is the MEASURED detection ratio D1/total
+      // which converges to I_center via the Law of Large Numbers.
+      // This is genuine quantum measurement data — exactly what a real
+      // single-photon detector readout would display.
+      let plotValue = I_center;
+      if (st.interferometerType === 'mzi' && st.simFired > 0) {
+        plotValue = st.simD1 / st.simFired;  // empirical probability P(D1)
+      }
 
       // Init buffer on first frame
       if (!initialised.current) {
@@ -96,17 +106,16 @@ const FringeExtrapolation = () => {
       }
 
       // ── PUSH TO HISTORY ──
-      // For MZI: also push when photons are fired (detected)
       let shouldPush = (frameCount.current % 2 === 0); // 30Hz baseline
 
+      // Force push on every new photon detection event
       if (st.interferometerType === 'mzi' && st.simFired > lastSimFired.current) {
-        // New photons were detected — push the measured ratio
         shouldPush = true;
         lastSimFired.current = st.simFired;
       }
 
       if (shouldPush) {
-        historyRef.current[writeIdx.current % HISTORY_LEN] = I_center;
+        historyRef.current[writeIdx.current % HISTORY_LEN] = plotValue;
         writeIdx.current++;
       }
 
