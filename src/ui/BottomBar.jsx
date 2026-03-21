@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
 import { computeOPD } from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor } from '../physics/basicInterference.js';
@@ -11,10 +11,25 @@ import FringeExtrapolation from './FringeExtrapolation.jsx';
  * BottomBar (Research Mode)
  * - Interferogram thumbnail (real fringes)
  * - Phase Density Profile — WAVE GRAPH with labeled axes
- * - Quantum State metrics
+ * - Detector Intensity I(t) — live oscilloscope trace
+ *
+ * Uses a throttled store subscription (max 7Hz) to prevent
+ * animations from causing expensive 60fps re-renders.
  */
 const BottomBar = () => {
-  const state = useSimulationStore();
+  // Throttled state: re-read store at most every 150ms (~7Hz)
+  const [state, setState] = useState(() => useSimulationStore.getState());
+  const lastUpdate = useRef(0);
+  useEffect(() => {
+    const unsub = useSimulationStore.subscribe((newState) => {
+      const now = performance.now();
+      if (now - lastUpdate.current > 150) {
+        lastUpdate.current = now;
+        setState(newState);
+      }
+    });
+    return unsub;
+  }, []);
   const waveCanvasRef = useRef(null);
 
   const interferometerType = state.interferometerType;

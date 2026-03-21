@@ -107,13 +107,17 @@ const MichelsonScene = () => {
           if (pa.val >= 50) { pa.val = 50; pa.dir = -1; }
           if (pa.val <= -50) { pa.val = -50; pa.dir = 1; }
         }
-        // Push to React store at 10Hz (every ~100ms) — prevents 60fps re-render cascade
+        // Share live 60fps value for smooth graph reading (no React re-render)
+        window._michelsonAnim = { mode: pa.mode, val: pa.val, ts };
+        // Push to React store at 10Hz — for numeric displays & BottomBar
         if (ts - lastParamPush.current > 100) {
           lastParamPush.current = ts;
           if (pa.mode === 'p') st.setParam('gasCellPressure', parseFloat(pa.val.toFixed(6)));
           else if (pa.mode === 't') st.setParam('mirrorTilt', parseFloat(pa.val.toFixed(6)));
           else st.setParam('mirrorDisplacement', parseFloat(pa.val.toFixed(6)));
         }
+      } else {
+        window._michelsonAnim = null;
       }
 
       const ctx = canvas.getContext('2d');
