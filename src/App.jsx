@@ -7,6 +7,7 @@ import BottomBar from './ui/BottomBar.jsx';
 import PhysicsNoisePanel from './ui/PhysicsNoisePanel.jsx';
 import QuantumPanel from './ui/QuantumPanel.jsx';
 import AnalyticsPanel from './ui/AnalyticsPanel.jsx';
+import LabPage from './ui/LabPage.jsx';
 import useSimulationStore from './store/simulationStore.js';
 import { computeOPD, computeTiltAveragedProbability } from './store/simulationStore.js';
 import { exportCSV, exportJSON } from './physics/dataExport.js';
@@ -16,6 +17,7 @@ const TABS = [
   { id: 'physics', label: 'WAVE OPTICS & NOISE' },
   { id: 'quantum', label: 'SUBATOMIC' },
   { id: 'analytics', label: 'ASTRONOMICAL' },
+  { id: 'lab', label: 'CONCEPT UNDERSTANDING' },
 ];
 
 const FlaskIcon = () => (
@@ -449,6 +451,7 @@ const App = () => {
               <BottomBar />
             </>
           )}
+          {activeTab === 'lab' && <LabPage />}
           {activeTab === 'physics' && <PhysicsNoisePanel />}
           {activeTab === 'quantum' && <QuantumPanel />}
           {activeTab === 'analytics' && <AnalyticsPanel />}
