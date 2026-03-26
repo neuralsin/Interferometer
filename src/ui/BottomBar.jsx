@@ -1,40 +1,43 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
+import { computeOPD } from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor } from '../physics/basicInterference.js';
 import { fringeVisibility, coherenceLength } from '../physics/coherenceModel.js';
 import { photonCount, phaseSNR } from '../physics/quantumModel.js';
 import { computeSagnac } from '../physics/sagnacModel.js';
+import FringeExtrapolation from './FringeExtrapolation.jsx';
 
 /**
  * BottomBar (Research Mode)
  * - Interferogram thumbnail (real fringes)
  * - Phase Density Profile — WAVE GRAPH with labeled axes
- * - Quantum State metrics
+ * - Detector Intensity I(t) — live oscilloscope trace
+ *
+ * Uses a throttled store subscription (max 7Hz) to prevent
+ * animations from causing expensive 60fps re-renders.
  */
 const BottomBar = () => {
-  const state = useSimulationStore();
+  // Throttled state: re-read store at most every 150ms (~7Hz)
+  const [state, setState] = useState(() => useSimulationStore.getState());
+  const lastUpdate = useRef(0);
+  useEffect(() => {
+    const unsub = useSimulationStore.subscribe((newState) => {
+      const now = performance.now();
+      if (now - lastUpdate.current > 150) {
+        lastUpdate.current = now;
+        setState(newState);
+      }
+    });
+    return unsub;
+  }, []);
   const waveCanvasRef = useRef(null);
 
   const interferometerType = state.interferometerType;
 
-  // ── per-interferometer OPD (each uses its own correct formula) ──
-  const GAS_DATA_BB = { air: { n0: 293e-6 }, he: { n0: 35e-6 }, ar: { n0: 281e-6 } };
-  const gasNm1_bb = (GAS_DATA_BB[state.gasCellGas]?.n0 || 293e-6) * state.gasCellPressure;
-  const nGasBB    = 1 + gasNm1_bb;
-  const michelsonGasOPD  = 2 * (nGasBB - 1) * state.gasCellLength;
-  const michelsonMirOPD  = 2 * state.mirrorDisplacement * 1e-6;
-  const michelsonTotalOPD = michelsonGasOPD + michelsonMirOPD;
+  // ── Central OPD engine (topology-aware) ──
+  const opdResult = computeOPD(state);
+  const opd = opdResult.opd;
 
-  // MZI: drag-only OPD (no Michelson tip polluting).  Default arm both = 580px, scale 0.5e-6 m/px
-  const mziOPD = 0; // drag positions are equal by default; compensator subtracted below
-
-  const compensatorOPD = state.compensatorEnabled
-    ? ((state.compensatorRefractiveIndex || 1.5168) - 1) * (state.compensatorThickness || 0.00635)
-    : 0;
-
-  const opd = interferometerType === 'michelson' ? michelsonTotalOPD
-            : interferometerType === 'sagnac'    ? 0   // sagnac uses phaseDiff separately
-            : mziOPD - compensatorOPD;            // mzi
   const visibility = fringeVisibility(opd, state.laserLinewidth);
   const cohLen = coherenceLength(state.laserLinewidth);
   const N = photonCount(state.laserPower, state.wavelength, state.detectorExposureTime);
@@ -42,8 +45,12 @@ const BottomBar = () => {
   const snr = N > 0 ? phaseSNR(k * Math.abs(opd), N, state.squeezingParam) : 0;
   const snrDB = snr > 1e-10 ? (10 * Math.log10(snr)).toFixed(1) : '0';
 
-  const michelsonFringes = michelsonTotalOPD / state.wavelength;
+  const michelsonFringes = opd / state.wavelength;
   const michelsonRegime = state.mirrorTilt < 0.05 ? 'Circular' : state.mirrorTilt < 0.5 ? 'Curved' : state.mirrorTilt < 2 ? 'Straight' : 'Dense';
+  const n0_bb = state.gasCellGas === 'air' ? 0.000293 : state.gasCellGas === 'he' ? 0.000035 : 0.000281;
+  const nGasBB = 1 + n0_bb * (state.gasCellPressure || 1);
+  const michelsonGasOPD = 2 * (nGasBB - 1) * (state.gasCellLength || 0.05);
+  const michelsonMirOPD = 2 * (state.mirrorDisplacement || 0) * 1e-6;
 
   // Sagnac calculations
   const sagnac = computeSagnac({
@@ -250,30 +257,8 @@ const BottomBar = () => {
         </div>
       </div>
 
-      {/* Quantum State — live computed */}
-      <div className="glass-card" style={{ width: 260, borderRadius: 'var(--radius-high)', padding: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <h4 className="label-micro" style={{ marginBottom: 4, letterSpacing: '0.2em' }}>Quantum State</h4>
-        <div className="metric-card">
-          <span className="metric-label">Coherence:</span>
-          <span className="metric-value">{(visibility * 100).toFixed(2)}%</span>
-        </div>
-        <div className="metric-card">
-          <span className="metric-label">Coh. Length:</span>
-          <span className="metric-value">{cohLen < 1 ? `${(cohLen * 100).toFixed(1)} cm` : `${cohLen.toFixed(2)} m`}</span>
-        </div>
-        <div className="metric-card">
-          <span className="metric-label">SNR_dB:</span>
-          <span className="metric-value">{snrDB}</span>
-        </div>
-        <div className="metric-card">
-          <span className="metric-label">Photon N:</span>
-          <span className="metric-value">{N > 1e6 ? `${(N / 1e6).toFixed(1)}M` : N.toFixed(0)}</span>
-        </div>
-        <button className="btn-ghost" onClick={() => useSimulationStore.getState().resetToDefaults()}
-          style={{ marginTop: 'auto', width: '100%', justifyContent: 'center', fontSize: 8 }}>
-          Reset_Defaults
-        </button>
-      </div>
+      {/* Fringe Extrapolation — real-time interferogram trace */}
+      <FringeExtrapolation />
     </div>
   );
 };

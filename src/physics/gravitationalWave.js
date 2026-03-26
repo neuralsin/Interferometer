@@ -34,24 +34,37 @@ export const sinusoidalStrain = (t, h0, fGW) =>
 
 /**
  * Chirp GW strain simulating a compact binary merger.
+ * Uses 0PN (leading-order) post-Newtonian waveform:
+ *   h(t) ∝ Mc^(5/4) × τ^(-1/4) × sin(Φ(t))
+ *   Φ(t) = -2 × (5 G Mc / c³)^(-5/8) × τ^(5/8)
+ *   where τ = t_merge - t
  *
  * @param {number} t - Current time (seconds)
- * @param {number} h0 - Characteristic strain
+ * @param {number} h0 - Characteristic strain amplitude
  * @param {number} tMerge - Time of merger (seconds)
- * @param {number} f0 - Initial GW frequency (Hz)
+ * @param {number} m1Solar - Mass 1 in solar masses (default 30)
+ * @param {number} m2Solar - Mass 2 in solar masses (default 25)
  * @returns {number} h(t)
  */
-export const chirpStrain = (t, h0, tMerge, f0 = 30) => {
-  const dt = tMerge - t;
-  if (dt <= 0) return 0;
+export const chirpStrain = (t, h0, tMerge, m1Solar = 30, m2Solar = 25) => {
+  const tau = tMerge - t;
+  if (tau <= 0) return 0;
 
-  // Simplified chirp: frequency increases as dt^(-3/8), amplitude as dt^(-1/4)
-  const amplitude = h0 * Math.pow(dt, -0.25);
-  const freq = f0 * Math.pow(dt, -3 / 8);
-  const phase = -2 * Math.pow(dt, 5 / 8) * TWO_PI * f0;
+  const G = 6.674e-11, Msun = 1.989e30, c = 3e8;
+  const m1 = m1Solar * Msun, m2 = m2Solar * Msun;
+  const Mtot = m1 + m2;
+  // Chirp mass: Mc = (m1·m2)^(3/5) / (m1+m2)^(1/5)
+  const Mc = Math.pow(m1 * m2, 3 / 5) / Math.pow(Mtot, 1 / 5);
 
-  // Clamp amplitude to prevent singularity
+  // Post-Newtonian phase: Φ(τ) = -2 × (τ / (5 G Mc / c³))^(5/8)
+  const tScale = 5 * G * Mc / (c * c * c); // characteristic time = 5 G Mc / c³
+  const phase = -2 * Math.pow(tau / tScale, 5 / 8);
+
+  // Amplitude: h ∝ τ^(-1/4) (from inspiral quadrupole formula)
+  const amplitude = h0 * Math.pow(tau, -0.25);
+  // Clamp amplitude to prevent singularity near merger
   const clampedAmp = Math.min(amplitude, h0 * 100);
+
   return clampedAmp * Math.sin(phase);
 };
 

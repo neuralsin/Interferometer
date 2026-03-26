@@ -1,5 +1,6 @@
 import { generateFringePattern } from '../physics/basicInterference.js';
 import { generateAdvancedFringePattern } from '../physics/advancedInterference.js';
+import { computeOPD } from '../store/simulationStore.js';
 
 /**
  * PhysicsRouter — Conditional computation routing.
@@ -34,6 +35,7 @@ const loadWasmEngine = async () => {
 
 /**
  * Compute fringe pattern from simulation state.
+ * Uses the central computeOPD engine for topology-aware OPD.
  *
  * @param {Object} state - Full Zustand store state
  * @param {number} elapsed - Elapsed time (seconds)
@@ -41,14 +43,13 @@ const loadWasmEngine = async () => {
  */
 export const computeFringePattern = (state, elapsed = 0) => {
   if (!state.isResearchMode) {
-    const armX = Math.sqrt((state.mirror1PosX || 0) ** 2 + (state.mirror1PosZ || 0) ** 2);
-    const armY = Math.sqrt((state.mirror2PosX || 0) ** 2 + (state.mirror2PosZ || 0) ** 2);
-    const opd = 2 * (armX - armY);
+    const { opd, tiltFactor } = computeOPD(state);
     return generateFringePattern({
       wavelength: state.wavelength,
       opdCenter: opd,
       tiltX: state.mirror1Tip || 0,
       tiltY: state.mirror2Tip || 0,
+      tiltFactor: tiltFactor,
       resolution: state.detectorArrayWidth || 256,
       detectorSize: 0.01,
       linewidth: state.laserLinewidth || 0,

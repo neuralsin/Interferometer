@@ -20,6 +20,7 @@ import { thermalOPDShift } from './thermalModel.js';
 import { sinusoidalStrain, gwPhaseShift } from './gravitationalWave.js';
 import { photonCount, addQuantumPhaseNoise } from './quantumModel.js';
 import { applyDetectorEffects } from './detectorModel.js';
+import { computeOPD } from '../store/simulationStore.js';
 
 const TWO_PI = 2 * Math.PI;
 const C_LIGHT = 299792458;
@@ -60,13 +61,11 @@ export const generateAdvancedFringePattern = (state, elapsed) => {
   const detectorSize = 0.01; // 10mm detector
   const halfSize = detectorSize / 2;
 
-  // ---- 1. Thermal OPD shift ----
-  const deltaT = envTemperature - 293.15; // deviation from 20°C reference
-  const thermalOPD = thermalDriftEnabled
-    ? thermalOPDShift(armLengthX, armLengthY, deltaT, mountMaterial)
-    : 0;
+  // ---- Use central OPD engine for topology-aware base OPD ----
+  const opdResult = computeOPD(state);
+  const tiltFactor = opdResult.tiltFactor;
 
-  // ---- 2. Noise buffers (regenerate periodically) ----
+  // ---- Noise buffers (regenerate periodically) ----
   if (noiseFrame % NOISE_REGEN_INTERVAL === 0 || !cachedPhaseNoise) {
     if (phaseNoiseEnabled) {
       cachedPhaseNoise = wienerPhaseNoise(NOISE_SAMPLES, NOISE_DT, laserLinewidth);
@@ -86,25 +85,8 @@ export const generateAdvancedFringePattern = (state, elapsed) => {
     ? cachedPhaseNoise[nIdx]
     : 0;
 
-  // Seismic displacement
-  const seismicDx = (seismicNoiseEnabled && cachedSeismicX) ? cachedSeismicX[nIdx] : 0;
-  const seismicDy = (seismicNoiseEnabled && cachedSeismicY) ? cachedSeismicY[nIdx] : 0;
-
-  // ---- 3. GW strain ----
-  const effectiveArmLength = armLengthX;
-  let gwOPD = 0;
-  if (gwEnabled) {
-    const h = sinusoidalStrain(elapsed, gwStrain, gwFrequency);
-    // Differential: ΔLx = +h/2 * L, ΔLy = -h/2 * L → total OPD = 2 * h * L
-    gwOPD = 2 * h * effectiveArmLength;
-  }
-
-  // ---- 4. Effective arm lengths with all perturbations ----
-  const effArmX = armLengthX + seismicDx;
-  const effArmY = armLengthY + seismicDy;
-
-  // ---- 5. Base OPD ----
-  const baseOPD = 2 * (effArmX - effArmY) + thermalOPD + gwOPD;
+  // ---- Base OPD from central engine (includes thermal, seismic, GW) ----
+  const baseOPD = opdResult.opd;
 
   // ---- 6. Coherence visibility ----
   const visibility = fringeVisibility(baseOPD, laserLinewidth);
@@ -114,8 +96,8 @@ export const generateAdvancedFringePattern = (state, elapsed) => {
 
   // ---- 8. Gaussian beam parameters ----
   const zR = rayleighRange(beamWaist, wavelength);
-  const wzX = beamRadius(beamWaist, effArmX * 2, zR);
-  const wzY = beamRadius(beamWaist, effArmY * 2, zR);
+  const wzX = beamRadius(beamWaist, armLengthX * 2, zR);
+  const wzY = beamRadius(beamWaist, armLengthY * 2, zR);
 
   // ---- 9. Generate fringe pattern ----
   const data = new Float32Array(N * N);
@@ -133,7 +115,7 @@ export const generateAdvancedFringePattern = (state, elapsed) => {
       const ampY = Math.exp(-(r * r) / (wzY * wzY));
 
       // Local OPD variation from mirror tilt
-      const opdLocal = baseOPD + 2 * (mirror1Tip * x + mirror2Tip * y);
+      const opdLocal = baseOPD + tiltFactor * (mirror1Tip * x + mirror2Tip * y);
 
       // Phase with noise
       let phase = k * opdLocal + phaseNoiseDelta;

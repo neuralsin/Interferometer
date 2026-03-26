@@ -4,31 +4,32 @@
  */
 
 import { generateFringePattern, wavelengthToColor } from './basicInterference.js';
+import { computeOPD } from '../store/simulationStore.js';
 
 /**
  * Export fringe data as CSV.
  * @param {Object} state - Full simulation state from store
  */
 export const exportCSV = (state) => {
-  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
-  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
-  const opd = 2 * (armX - armY);
+  const { opd, tiltFactor } = computeOPD(state);
 
   const data = generateFringePattern({
     wavelength: state.wavelength,
     opdCenter: opd,
     tiltX: state.mirror1Tip,
     tiltY: state.mirror2Tip,
+    tiltFactor,
     resolution: state.detectorArrayWidth,
   });
 
+  const iType = state.interferometerType || 'mzi';
+  const typeName = iType === 'michelson' ? 'Michelson' : iType === 'sagnac' ? 'Sagnac' : 'Mach-Zehnder';
   const N = state.detectorArrayWidth;
-  let csv = '# Michelson Interferometer Simulab — CSV Export\n';
+  let csv = `# ${typeName} Interferometer Simulab — CSV Export\n`;
   csv += `# Wavelength: ${(state.wavelength * 1e9).toFixed(2)} nm\n`;
   csv += `# Power: ${(state.laserPower * 1e3).toFixed(3)} mW\n`;
   csv += `# OPD: ${(opd * 1e6).toFixed(4)} μm\n`;
-  csv += `# Arm X: ${(armX * 1e3).toFixed(3)} mm\n`;
-  csv += `# Arm Y: ${(armY * 1e3).toFixed(3)} mm\n`;
+  csv += `# Interferometer: ${typeName}\n`;
   csv += `# Detector: ${N}x${N} pixels\n`;
   csv += 'x,y,intensity\n';
 
@@ -46,9 +47,7 @@ export const exportCSV = (state) => {
  * @param {Object} state - Full simulation state from store
  */
 export const exportImage = (state) => {
-  const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
-  const armY = Math.sqrt(state.mirror2PosX ** 2 + state.mirror2PosZ ** 2);
-  const opd = 2 * (armX - armY);
+  const { opd, tiltFactor } = computeOPD(state);
   const N = state.detectorArrayWidth;
 
   const data = generateFringePattern({
@@ -56,6 +55,7 @@ export const exportImage = (state) => {
     opdCenter: opd,
     tiltX: state.mirror1Tip,
     tiltY: state.mirror2Tip,
+    tiltFactor,
     resolution: N,
   });
 
@@ -72,7 +72,7 @@ export const exportImage = (state) => {
 
   for (let i = 0; i < data.length; i++) {
     const val = Math.max(0, Math.min(1, data[i]));
-    imageData.data[i * 4]     = Math.round(r * val);
+    imageData.data[i * 4] = Math.round(r * val);
     imageData.data[i * 4 + 1] = Math.round(g * val);
     imageData.data[i * 4 + 2] = Math.round(b * val);
     imageData.data[i * 4 + 3] = 255;
@@ -147,9 +147,8 @@ export const exportJSON = (state) => {
       exposureTime_s: state.detectorExposureTime,
     },
     derived: {
-      armLengthX_m: armX,
-      armLengthY_m: armY,
-      opticalPathDifference_m: 2 * (armX - armY),
+      interferometerType: state.interferometerType || 'mzi',
+      opticalPathDifference_m: computeOPD(state).opd,
     },
     quantum: {
       squeezingParam: state.squeezingParam,

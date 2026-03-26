@@ -72,14 +72,17 @@ export const createCompensatorPlate = () => {
 
   /**
    * Update the optical path contribution based on tilt angle.
-   * At angle θ, path = d × (n/cos(θ_refracted) - 1/cos(θ))
-   * Approximate for small θ: path ≈ (n-1) × d × (1 + θ²(n+1)/(2n))
+   * Exact geometric formula from Snell's law:
+   *   ΔOPL = d × (√(n² − sin²θ) − cosθ − n + 1)
    */
   group.userData.updateTilt = (tiltAngle) => {
     const n = group.userData.physicsParams.refractiveIndex;
     const d = group.userData.physicsParams.thickness;
-    const tiltFactor = 1 + (tiltAngle * tiltAngle * (n + 1)) / (2 * n);
-    group.userData.physicsParams.opticalPathContribution = (n - 1) * d * tiltFactor;
+    const sinT = Math.sin(tiltAngle);
+    const cosT = Math.cos(tiltAngle);
+    // Exact Snell's law OPD for tilted parallel plate
+    const opl = d * (Math.sqrt(n * n - sinT * sinT) - cosT - n + 1);
+    group.userData.physicsParams.opticalPathContribution = opl;
     group.userData.physicsParams.angle = tiltAngle;
   };
 

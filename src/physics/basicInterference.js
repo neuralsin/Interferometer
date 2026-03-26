@@ -54,6 +54,7 @@ export const generateFringePattern = ({
   opdCenter,
   tiltX = 0,
   tiltY = 0,
+  tiltFactor = 2, // 2 for double-pass (Michelson), 1 for single-pass (MZI)
   resolution = 256,
   detectorSize = 0.01,
   linewidth = 0,
@@ -69,7 +70,8 @@ export const generateFringePattern = ({
       const x = -halfSize + (i / (N - 1)) * detectorSize;
 
       // OPD varies across detector due to mirror tilt
-      const opdLocal = opdCenter + 2 * (tiltX * x + tiltY * y);
+      // tiltFactor: 2 for double-pass reflection (Michelson), 1 for transmission (MZI)
+      const opdLocal = opdCenter + tiltFactor * (tiltX * x + tiltY * y);
 
       // Visibility from coherence envelope
       const V = temporalVisibility(opdLocal, linewidth);

@@ -24,12 +24,14 @@ using namespace physics;
 constexpr double H_PLANCK = 6.62607015e-34;
 
 static NoiseGenerator noiseGen(42);
+static std::mt19937 continuousRng(123);
+static std::normal_distribution<double> continuousDist(0.0, 1.0);
 
-// Pre-cached noise buffers
-static std::vector<double> phaseNoiseCache;
-static std::vector<double> seismicXCache;
-static std::vector<double> seismicYCache;
-static int noiseFrameCounter = 0;
+// Continuous stateful noise accumulators (no array regeneration)
+static double currentPhaseNoise = 0.0;
+static double currentSeismicX   = 0.0;
+static double currentSeismicY   = 0.0;
+static int noiseFrameCounter    = 0;
 
 /**
  * Calculate the full fringe pattern with all physics models.
@@ -60,21 +62,29 @@ val calculateFringePattern(
     double wzX = beamRadius(beamWaist, std::abs(opd), zR);
     double wzY = beamRadius(beamWaist, std::abs(opd) * 0.5, zR);
 
-    // Regenerate noise buffers periodically
-    if (noiseFrameCounter % 60 == 0) {
-        if (phaseNoiseEnabled) {
-            phaseNoiseCache = noiseGen.wienerPhaseNoise(512, 1.0/60.0, linewidth);
+    // ── Continuous stateful noise: one Wiener step per frame ──
+    const double dt = 1.0 / 60.0;
+    if (phaseNoiseEnabled) {
+        double D = M_PI * linewidth;
+        double sigma = std::sqrt(2.0 * D * dt);
+        currentPhaseNoise += continuousDist(continuousRng) * sigma;
+    }
+    if (seismicNoiseEnabled) {
+        double t = noiseFrameCounter * dt;
+        currentSeismicX = 0;
+        currentSeismicY = 0;
+        double seisAmp = 1e-9;
+        double freqs[] = {15.0, 30.0, 60.0, 120.0};
+        for (auto freq : freqs) {
+            currentSeismicX += (seisAmp / std::sqrt(freq)) * std::sin(2.0 * M_PI * freq * t + freq * 0.7321);
+            currentSeismicY += (seisAmp / std::sqrt(freq)) * std::cos(2.0 * M_PI * freq * t + freq * 0.3179);
         }
-        if (seismicNoiseEnabled) {
-            seismicXCache = noiseGen.seismicNoise(512, 1.0/60.0, 1e-9);
-            seismicYCache = noiseGen.seismicNoise(512, 1.0/60.0, 1e-9);
-        }
+        currentSeismicX += continuousDist(continuousRng) * seisAmp * 0.1;
+        currentSeismicY += continuousDist(continuousRng) * seisAmp * 0.1;
     }
     noiseFrameCounter++;
 
-    int nIdx = noiseFrameCounter % 512;
-    double phaseDelta = (phaseNoiseEnabled && !phaseNoiseCache.empty())
-        ? phaseNoiseCache[nIdx] : 0.0;
+    double phaseDelta = phaseNoiseEnabled ? currentPhaseNoise : 0.0;
 
     // Compute intensity grid
     std::vector<double> data(N * N);

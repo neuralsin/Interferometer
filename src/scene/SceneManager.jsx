@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import useSimulationStore from '../store/simulationStore.js';
+import { computeOPD, computeTiltAveragedProbability } from '../store/simulationStore.js';
 import { generateFringePattern, wavelengthToColor, detectionProbabilities } from '../physics/basicInterference.js';
 import { fringeVisibility } from '../physics/coherenceModel.js';
 
@@ -130,19 +131,8 @@ const SceneManager = () => {
   const armXphys = arm1LenPx * 0.0005;
   const armYphys = arm2LenPx * 0.0005;
 
-  // OPD from PHYSICS (store mirror positions in meters — nm/pm scale precision)
-  const physArmX = Math.sqrt(mirror1PosX ** 2 + mirror1PosZ ** 2);
-  const physArmY = Math.sqrt(mirror2PosX ** 2 + mirror2PosZ ** 2);
-  const tipOPD = (mirror1Tip - mirror2Tip) * physArmX;
-  const defaultArm1Px = 580, defaultArm2Px = 580;
-  const dragOPD = (arm1LenPx - defaultArm1Px - (arm2LenPx - defaultArm2Px)) * 0.5e-6;
-  const baseOPD = 2 * (physArmX - physArmY);
-  const compensatorOPD = compensatorEnabled
-    ? (compensatorRefractiveIndex - 1) * compensatorThickness
-    : 0;
-  // MZI OPD — ONLY from visual drag difference + compensator.
-  // Do NOT include Michelson store tipOPD/baseOPD: those belong to Michelson scene only.
-  const opd = dragOPD - compensatorOPD;
+  // MZI OPD — from central physics engine (includes drag, compensator, thermal, seismic, GW)
+  const opd = computeOPD(useSimulationStore.getState()).opd;
 
   /**
    * Build a photon with SUPERPOSITION paths.
@@ -164,10 +154,8 @@ const SceneManager = () => {
       // No BS2 → photon takes one arm randomly, goes straight to its detector
       goD1 = Math.random() < 0.5;
     } else if (bothArmsActive) {
-      // Full MZI interference
-      const { p1 } = detectionProbabilities(st.wavelength, opd);
-      const vis = fringeVisibility(opd, st.laserLinewidth);
-      const effectiveP1 = p1 * vis + 0.5 * (1 - vis);
+      // Full MZI interference (tilt-aware)
+      const { p1: effectiveP1 } = computeTiltAveragedProbability(st);
       goD1 = Math.random() < effectiveP1;
     } else {
       // Only one arm → no interference → 50:50
@@ -210,18 +198,17 @@ const SceneManager = () => {
   const fireN = useCallback((n) => {
     const st = useSimulationStore.getState();
     const bothArms = st.m1Enabled && st.m2Enabled;
-    const { p1 } = detectionProbabilities(st.wavelength, opd);
-    const vis = fringeVisibility(opd, st.laserLinewidth);
-    const effectiveP1 = (bothArms && st.bs2Enabled) ? (p1 * vis + 0.5 * (1 - vis)) : 0.5;
+    const { p1 } = computeTiltAveragedProbability(st);
+    const effectiveP1 = (bothArms && st.bs2Enabled) ? p1 : 0.5;
 
     // Instantly resolve bulk (n-5) photons statistically
     const animateCount = Math.min(5, n);
     const instantCount = n - animateCount;
     if (instantCount > 0) {
-      let d1 = 0, d2 = 0;
-      for (let i = 0; i < instantCount; i++) {
-        if (Math.random() < effectiveP1) d1++; else d2++;
-      }
+      // Deterministic Binomial Expected-Value split — eliminates
+      // stochastic variance on small N that causes apparent physics mismatches
+      const d1 = Math.round(instantCount * effectiveP1);
+      const d2 = instantCount - d1;
       // Batch update store
       const store = useSimulationStore.getState();
       useSimulationStore.setState({
@@ -616,11 +603,11 @@ const SceneManager = () => {
 
       // Theory display
       ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = `500 ${ps(9)}px sans-serif`;
-      ctx.fillText(`Sent: ${st.simFired}`, px(680), py(20));
+      ctx.fillText(`Sent: ${st.simFired}`, px(680), py(45));
       const { p1: tp1, p2: tp2 } = detectionProbabilities(st.wavelength, opd);
       ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = `${ps(8)}px monospace`;
       const interferenceLabel = (st.m1Enabled && st.m2Enabled && st.bs2Enabled) ? '' : ' (no interference)';
-      ctx.fillText(`P(D1)=${(tp1 * 100).toFixed(0)}% P(D2)=${(tp2 * 100).toFixed(0)}%${interferenceLabel}`, px(680), py(35));
+      ctx.fillText(`P(D1)=${(tp1 * 100).toFixed(0)}% P(D2)=${(tp2 * 100).toFixed(0)}%${interferenceLabel}`, px(680), py(60));
 
       // Formula subheading
       ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = `${ps(7)}px monospace`; ctx.textAlign = 'left';

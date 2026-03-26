@@ -99,12 +99,16 @@ export default function AnalyticsPanel() {
   // Luminosity distance (proper formula: d_L from chirp amplitude)
   const lumDistMpc = chirpM > 0 && state.gwStrain > 0
     ? (5.9e-22 * Math.pow(chirpM * Msun, 5/3) / (state.gwStrain * armLenM)) / 3.086e22
-    : 410 * chirpM / 28.1;
+    : Math.min(410, 410 * chirpM / 28.1); // cap fallback
 
   // Final spin (Boyle & Buonanno 2008)
   const finalSpin = Math.max(0, Math.min(0.998, Math.sqrt(12)*eta - 3.871*Math.pow(eta,2) + 4.028*Math.pow(eta,3) + 0.3));
-  const tMerge = 1.5;
   const f0GW   = 20;
+  const McKg = chirpM * Msun;
+  // Source-dependent chirp duration using Peters formula: τ ∝ Mc^(-5/3)
+  const tMerge = McKg > 0
+    ? Math.min(10, Math.max(0.1, (5/256) * Math.pow(c, 5) / (Math.pow(G, 3) * Math.pow(McKg, 5)) * Math.pow(Math.PI * f0GW, -8/3) / Math.pow(Math.PI, 8/3)))
+    : 1.5;
 
   // ── Network SNR & detection stats ──
   const netSNR  = snrV * Math.sqrt(3);
@@ -113,8 +117,11 @@ export default function AnalyticsPanel() {
 
   // ── Research-grade GW predictions ──
   // Detection horizon: max distance where SNR=8 for this source
-  // h ∝ 1/d, so d_max = d_current × (SNR_current / 8)
-  const horizonMpc = snrV > 0 ? lumDistMpc * (snrV / 8) : 0;
+  // Cap to physical limits: design aLIGO BBH ~15 Gpc, BNS ~0.4 Gpc
+  const MAX_HORIZON = { bbh: 15000, bns: 400, nsbh: 3000, cw: 100 };
+  const maxH = MAX_HORIZON[state.celestialSource] || 15000;
+  const rawHorizonMpc = snrV > 0 ? lumDistMpc * (snrV / 8) : 0;
+  const horizonMpc = Math.min(maxH, rawHorizonMpc);
   const horizonGpc = horizonMpc / 1000;
   // Max observable redshift: z ≈ d_L × H₀/c (Hubble approx for z<1)
   const H0 = 67.4e3 / 3.086e22; // H₀ in 1/s
@@ -127,7 +134,8 @@ export default function AnalyticsPanel() {
     bbh:  23.9, bns: 320, nsbh: 45, cw: 0,
   };
   const rateGpc3yr = EVENT_RATES[state.celestialSource] || 23.9;
-  const expectedEventsYr = rateGpc3yr * Math.pow(horizonGpc, 3) * (4/3) * Math.PI;
+  // Cap event rate to physically reasonable values
+  const expectedEventsYr = Math.min(1e5, rateGpc3yr * Math.pow(horizonGpc, 3) * (4/3) * Math.PI);
 
   // Radiated energy: E_rad = η × M_total × c²
   const eFraction = eta > 0 ? Math.min(0.1, 0.0559 * Math.pow(4*eta, 2)) : 0; // NR fit
@@ -136,7 +144,6 @@ export default function AnalyticsPanel() {
 
   // Time in band: how long signal is observable (Peters formula simplified)
   // τ = (5/256) × c⁵/(G³ M_c⁵) × f^(-8/3) evaluated at f_low=20Hz
-  const McKg = chirpM * Msun;
   const timeInBand = McKg > 0
     ? (5/256) * Math.pow(c, 5) / (Math.pow(G, 3) * Math.pow(McKg, 5)) * Math.pow(Math.PI * 20, -8/3) / Math.pow(Math.PI, 8/3)
     : 0;
@@ -145,7 +152,7 @@ export default function AnalyticsPanel() {
     : timeInBand > 60 ? `${(timeInBand/60).toFixed(1)} min` : `${timeInBand.toFixed(1)} s`;
 
   // Sky localization (crude: ΔΩ ∝ 1/SNR², 3 detectors ~ 10 deg² at SNR=20)
-  const skyLocDeg2 = snrV > 1 ? 10 * Math.pow(20/snrV, 2) : 99999;
+  const skyLocDeg2 = snrV > 1 ? Math.min(41253, 10 * Math.pow(20/snrV, 2)) : 41253; // cap at full sky
 
   // Peak luminosity: L_peak ≈ η² c⁵/G (Thorne's estimate)
   const peakLum = Math.pow(eta, 2) * Math.pow(c, 5) / G;
@@ -198,7 +205,7 @@ export default function AnalyticsPanel() {
       for (let x=0;x<w;x++) {
         const tSample = t - viewW + (x/w)*viewW;
         const tLoc    = ((tSample % tMerge) + tMerge) % tMerge;
-        const strain  = chirpStrain(tLoc, cur.gwStrain * 1e19, tMerge, f0);
+        const strain  = chirpStrain(tLoc, cur.gwStrain * 1e19, tMerge, cur.mass1, cur.mass2);
         tArr.push(tSample); strArr.push(strain);
       }
       const strMax = Math.max(...strArr.map(Math.abs), 1e-10);

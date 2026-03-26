@@ -21,6 +21,7 @@ const PhysicsNoisePanel = () => {
   const { setParam } = state;
   const beamCanvasRef = useRef(null);
   const psdCanvasRef = useRef(null);
+  const modeCanvasRef = useRef(null);
 
   // Derived backend values
   const armX = Math.sqrt(state.mirror1PosX ** 2 + state.mirror1PosZ ** 2);
@@ -28,6 +29,103 @@ const PhysicsNoisePanel = () => {
   const wz = beamRadius(state.beamWaist, armX * 2, zR);
   const gouy = gouyPhase(armX * 2, zR);
   const cohLength = calcCoherenceLength(state.laserLinewidth);
+
+  // ── Spatial Mode Matching (Overlap Integral η) ──
+  // η = 4 / [ (w1/w2 + w2/w1)² + (π w1 w2 / (λ R))² ]
+  // w1 = beam waist, w2 = beam at mirror (perturbed), R = radius of curvature at arm end
+  const w1 = state.beamWaist;
+  const w2 = wz; // beam radius at mirror distance
+  const Rcurv = armX * 2 > 1e-12 ? (armX * 2) * (1 + (zR / (armX * 2)) ** 2) : Infinity;
+  const modeMatchEta = useMemo(() => {
+    const ratio = w1 / w2 + w2 / w1;
+    const curvTerm = isFinite(Rcurv) ? (Math.PI * w1 * w2 / (state.wavelength * Rcurv)) ** 2 : 0;
+    return 4 / (ratio * ratio + curvTerm);
+  }, [w1, w2, Rcurv, state.wavelength]);
+
+  // ── Transverse Mode Decomposition (HG amplitudes from mirror tilt) ──
+  // Tilt couples TEM00 into HG01: c₁ ≈ θ·w₀·k/2 where k = 2π/λ
+  // Power in HG01 = |c₁|², power remaining in HG00 = 1 - |c₁|²
+  const modeDecomp = useMemo(() => {
+    const tiltRad = (state.mirrorTilt || 0) * 1e-3; // mrad → rad
+    const k = 2 * Math.PI / state.wavelength;
+    const c1 = tiltRad * state.beamWaist * k / 2; // coupling amplitude into HG01
+    const p01 = Math.min(1, c1 * c1); // power fraction in HG01
+    const c2 = 0.5 * c1 * c1; // second-order coupling into HG02 (much smaller)
+    const p02 = Math.min(1 - p01, c2 * c2);
+    const p00 = Math.max(0, 1 - p01 - p02); // remaining in TEM00
+    return { p00, p01, p02 };
+  }, [state.mirrorTilt, state.beamWaist, state.wavelength]);
+
+  // ── Draw Transverse Mode Histogram ──
+  useEffect(() => {
+    const canvas = modeCanvasRef.current;
+    if (!canvas) return;
+    const draw = () => {
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const pw = parent.clientWidth, ph = parent.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = pw * dpr; canvas.height = ph * dpr;
+      canvas.style.width = pw + 'px'; canvas.style.height = ph + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, pw, ph);
+
+      const modes = [
+        { label: 'HG₀₀', value: modeDecomp.p00, color: 'rgba(255,255,255,0.8)' },
+        { label: 'HG₀₁', value: modeDecomp.p01, color: 'rgba(79,156,249,0.8)' },
+        { label: 'HG₀₂', value: modeDecomp.p02, color: 'rgba(249,115,79,0.6)' },
+      ];
+      const pad = { top: 18, bottom: 22, left: 8, right: 8 };
+      const plotW = pw - pad.left - pad.right;
+      const plotH = ph - pad.top - pad.bottom;
+      const barW = plotW / modes.length * 0.6;
+      const gap = plotW / modes.length;
+
+      // Y-axis grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 0.5;
+      for (let p = 0; p <= 1; p += 0.25) {
+        const y = pad.top + plotH * (1 - p);
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + plotW, y); ctx.stroke();
+      }
+      // Y-axis labels
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = '7px monospace'; ctx.textAlign = 'right';
+      [0, 0.25, 0.5, 0.75, 1].forEach(p => {
+        ctx.fillText((p * 100).toFixed(0) + '%', pad.left - 2, pad.top + plotH * (1 - p) + 3);
+      });
+
+      modes.forEach((m, i) => {
+        const x = pad.left + i * gap + (gap - barW) / 2;
+        const barH = m.value * plotH;
+        const y = pad.top + plotH - barH;
+        // Bar
+        const grd = ctx.createLinearGradient(0, y, 0, y + barH);
+        grd.addColorStop(0, m.color);
+        grd.addColorStop(1, m.color.replace(/[\d.]+\)$/, '0.15)'));
+        ctx.fillStyle = grd;
+        ctx.fillRect(x, y, barW, barH);
+        // Border
+        ctx.strokeStyle = m.color; ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, barW, barH);
+        // Label
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+        ctx.fillText(m.label, x + barW / 2, ph - 6);
+        // Value on top
+        if (m.value > 0.01) {
+          ctx.fillStyle = '#fff'; ctx.font = '8px monospace';
+          ctx.fillText((m.value * 100).toFixed(1) + '%', x + barW / 2, y - 4);
+        }
+      });
+
+      // Title
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
+      ctx.fillText('TRANSVERSE MODE ENERGY', 4, 10);
+    };
+    draw();
+    const obs = new ResizeObserver(draw);
+    obs.observe(canvas.parentElement);
+    return () => obs.disconnect();
+  }, [modeDecomp]);
 
   // Draw Gaussian beam profile using REAL physics
   useEffect(() => {
@@ -48,7 +146,10 @@ const PhysicsNoisePanel = () => {
       const zRVal = Math.PI * w0 * w0 / state.wavelength;
       // Scale: map ±3*zR to canvas width
       const zRange = 3 * zRVal;
-      const waistPixels = Math.max(8, Math.min(h * 0.3, (w0 / (w0 * 4)) * h * 0.3));
+      // Make waist thickness visibly react to slider (scaled by square root to compress 5000x dynamic range)
+      const basePixels = h * 0.05;
+      const dynamicPixels = Math.pow(w0 / 500e-6, 0.5) * (h * 0.25);
+      const waistPixels = basePixels + dynamicPixels;
 
       const midH = h / 2;
       const waistX = w / 2;
@@ -95,11 +196,13 @@ const PhysicsNoisePanel = () => {
       ctx.fillStyle = 'rgba(79,156,249,0.5)'; ctx.font = `${Math.max(10, w * 0.02)}px monospace`; ctx.textAlign = 'left';
       ctx.fillText('w₀', waistX + 4, midH - waistPixels - 4);
 
-      // Z axis labels
-      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = `${Math.max(9, w * 0.015)}px monospace`; ctx.textAlign = 'center';
-      ctx.fillText('-z_R', w * 0.25, h - 6);
-      ctx.fillText('0', waistX, h - 6);
-      ctx.fillText('+z_R', w * 0.75, h - 6);
+      // Z axis labels — actively displaying zR
+      const formatZ = (m) => m < 0.01 ? `${(m*1e3).toFixed(1)}mm` : `${m.toFixed(2)}m`;
+      const zrStr = formatZ(zRVal);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = `${Math.max(9, w * 0.015)}px monospace`; ctx.textAlign = 'center';
+      ctx.fillText(`-${zrStr}`, w * 0.25, h - 6);
+      ctx.fillText('z=0', waistX, h - 6);
+      ctx.fillText(`+${zrStr}`, w * 0.75, h - 6);
 
       // Formula
       ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = `${Math.max(8, w * 0.013)}px monospace`; ctx.textAlign = 'left';
@@ -149,8 +252,8 @@ const PhysicsNoisePanel = () => {
       // Fixed dB window — prevents stretching to infinity when linewidth changes
       const allDB = points.map(p => p.psdDB).filter(d => isFinite(d));
       const peakDB = Math.max(...allDB);
-      // Always show a 60 dB range below peak, clamped to reasonable values
-      const yMax = Math.min(100, Math.max(0, Math.ceil(peakDB / 10) * 10 + 5));
+      // Always show a 65 dB range below peak, naturally floating
+      const yMax = Math.min(200, Math.ceil(peakDB / 10) * 10 + 5);
       const yMin = yMax - 65;
       const toX = (f) => pad.left + (Math.log10(f / fMin) / Math.log10(fMax / fMin)) * plotW;
       const toY = (db) => {
@@ -295,72 +398,125 @@ const PhysicsNoisePanel = () => {
       {/* Main Grid — 12 col */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
 
-        {/* Wave Optics (Left) */}
+        {/* Wave Optics (Left) — Full Research Controls */}
         <section className="glass-card" style={{ borderRadius: 'var(--radius-md)', padding: 24, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 32 }}>
-            <h2 className="label-section">Wave Optics</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h2 className="label-section">Gaussian Beam Optics</h2>
             <span style={{ fontSize: 8, border: '1px solid rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 'var(--radius-full)', color: 'var(--text-mercury)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
               w₀={((state.beamWaist * 1e6)).toFixed(1)}μm
             </span>
           </div>
 
+          {/* Active input sliders */}
           <SliderControl label="Beam Waist (w₀)" unit="μm"
             value={state.beamWaist * 1e6} min={0.1} max={500} step={0.1}
             onChange={(um) => setParam('beamWaist', um * 1e-6)}
-            formula="z_R = π·w₀²/λ  (Rayleigh range):  w(z) = w₀ · √(1 + (z/z_R)²)"
+            formula="z_R = π·w₀²/λ"
             formatValue={(v) => v.toFixed(1)} />
 
-          <div className="slider-row">
-            <div className="slider-row-label">
-              <span>Rayleigh Range (z_R)</span>
-              <span className="slider-value">{(zR * 1e3).toFixed(2)} mm</span>
-            </div>
-          </div>
+          <SliderControl label="Wavelength (λ)" unit="nm"
+            value={state.wavelength * 1e9} min={200} max={1600} step={1}
+            onChange={(nm) => setParam('wavelength', nm * 1e-9)}
+            formula="Δθ = λ/(π·w₀)  |  BPP = w₀·Δθ"
+            formatValue={(v) => v.toFixed(0)} />
 
-          <div className="slider-row">
-            <div className="slider-row-label">
-              <span>Gouy Phase (ψ)</span>
-              <span className="slider-value">{(gouy / Math.PI).toFixed(3)}π rad</span>
-            </div>
-          </div>
+          <SliderControl label="Mirror Tilt" unit="mrad"
+            value={state.mirrorTilt || 0} min={0} max={5} step={0.01}
+            onChange={(v) => setParam('mirrorTilt', v)}
+            formula="c₁ = θ·w₀·k/2 → HG₀₁ coupling"
+            formatValue={(v) => v.toFixed(2)} />
 
-          <div className="slider-row">
-            <div className="slider-row-label">
-              <span>Coherence Length</span>
-              <span className="slider-value">{(cohLength * 1e3).toFixed(1)} mm</span>
-            </div>
+          <SliderControl label="Laser Linewidth (Δν)" unit="kHz"
+            value={state.laserLinewidth / 1000} min={0.1} max={1000} step={0.1}
+            onChange={(kHz) => setParam('laserLinewidth', kHz * 1000)}
+            formula="Lc = c/Δν  |  PSD ∝ Δν/[(ν-ν₀)²+(Δν/2)²]"
+            formatValue={(v) => v.toFixed(1)} />
+
+          {/* Derived physics readouts — 2×3 grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 12 }}>
+            <DerivedTile label="Rayleigh Range" value={(zR * 1e3).toFixed(2)} unit="mm" formula="z_R = πw₀²/λ" />
+            <DerivedTile label="Gouy Phase" value={(gouy / Math.PI).toFixed(3) + 'π'} unit="rad" formula="ψ = atan(z/z_R)" />
+            <DerivedTile label="Coherence Length" value={(cohLength * 1e3).toFixed(1)} unit="mm" formula="Lc = c/Δν" />
+            <DerivedTile label="Far-Field Divergence" value={((state.wavelength / (Math.PI * state.beamWaist)) * 1e3).toFixed(2)} unit="mrad" formula="Δθ = λ/(πw₀)" />
+            <DerivedTile label="Beam Param. Product" value={(state.beamWaist * state.wavelength / (Math.PI * state.beamWaist) * 1e6).toFixed(3)} unit="mm·mrad" formula="BPP = w₀·Δθ" />
+            <DerivedTile label="Depth of Focus" value={(2 * zR * 1e3).toFixed(2)} unit="mm" formula="DOF = 2z_R" />
           </div>
 
           {/* Beam Profile Canvas */}
-          <div style={{ flex: 1, marginTop: 16, borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', minHeight: 150 }}>
+          <div style={{ flex: 1, marginTop: 12, borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', minHeight: 120 }}>
             <div className="viewport-grid" style={{ position: 'absolute', inset: 0, opacity: 0.2 }} />
-            <canvas ref={beamCanvasRef} style={{ width: '100%', height: '100%', position: 'relative', zIndex: 1 }} />
-            <div style={{ position: 'absolute', bottom: 12, left: 16, fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-              LONGITUDINAL_PROFILE
+            <canvas ref={beamCanvasRef} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }} />
+            <div style={{ position: 'absolute', bottom: 8, left: 12, fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+              LONGITUDINAL BEAM PROFILE
             </div>
+          </div>
+
+          {/* ── Mode Matching & Alignment Analysis ── */}
+          <div style={{ marginTop: 10, padding: 10, borderRadius: 'var(--radius-md)', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--text-mercury)', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
+                Mode Matching Efficiency
+              </span>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: modeMatchEta > 0.95 ? 'rgba(100,255,150,0.9)' : modeMatchEta > 0.8 ? 'rgba(255,200,80,0.9)' : 'rgba(255,100,80,0.9)' }}>
+                η = {(modeMatchEta * 100).toFixed(2)}%
+              </span>
+            </div>
+            <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.25)', marginBottom: 4 }}>
+              η = 4 / [(w₁/w₂ + w₂/w₁)² + (πw₁w₂/λR)²]
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              <div style={{ padding: 4, borderRadius: 4, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>w(z) at mirror</div>
+                <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#fff' }}>{(w2 * 1e6).toFixed(1)} <span style={{ fontSize: 7, opacity: 0.4 }}>μm</span></div>
+              </div>
+              <div style={{ padding: 4, borderRadius: 4, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>R(z) curvature</div>
+                <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#fff' }}>{isFinite(Rcurv) ? (Rcurv).toFixed(3) : '∞'} <span style={{ fontSize: 7, opacity: 0.4 }}>m</span></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: modeMatchEta > 0.95 ? 'rgba(100,255,150,0.6)' : modeMatchEta > 0.8 ? 'rgba(255,200,80,0.6)' : 'rgba(255,100,80,0.6)', width: `${modeMatchEta * 100}%`, transition: 'width 200ms ease' }} />
+            </div>
+          </div>
+
+          {/* ── Transverse Mode Decomposition Histogram ── */}
+          <div style={{ marginTop: 8, borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', height: 110, minHeight: 110 }}>
+            <canvas ref={modeCanvasRef} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }} />
           </div>
         </section>
 
-        {/* Noise Profiles (Right) */}
+        {/* Noise Profiles (Right) — with active linewidth control */}
         <section className="glass-card" style={{ borderRadius: 'var(--radius-md)', padding: 24, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 32 }}>
-            <h2 className="label-section">Noise Profiles</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h2 className="label-section">Noise & Spectral Analysis</h2>
             <div style={{ display: 'flex', gap: 16 }}>
               <NoiseLegend color="white" label="Phase PSD" glow />
-              <NoiseLegend color="rgba(255,255,255,0.3)" label="Seismic Inj." />
+              <NoiseLegend color="rgba(79,156,249,0.6)" label="Seismic" />
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, flex: 1 }}>
-            {/* PSD Wave Graph (Canvas) — explicit height prevents clientHeight=0 */}
-          <div className="glass-card" style={{ borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', height: 220, minHeight: 220 }}>
+          {/* Noise toggle row */}
+          <div style={{ display: 'flex', gap: 24, marginBottom: 16 }}>
+            <ToggleInline label="Phase Noise" paramKey="phaseNoiseEnabled" />
+            <ToggleInline label="Seismic" paramKey="seismicNoiseEnabled" />
+            <ToggleInline label="Thermal Drift" paramKey="thermalDriftEnabled" />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, flex: 1 }}>
+            {/* PSD Wave Graph */}
+            <div className="glass-card" style={{ borderRadius: 'var(--radius-md)', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', height: 220, minHeight: 220 }}>
               <canvas ref={psdCanvasRef} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, zIndex: 1 }} />
+              <div style={{ position: 'absolute', bottom: 6, left: 10, fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.2)' }}>
+                LORENTZIAN PSD — Δν = {(state.laserLinewidth / 1000).toFixed(1)} kHz
+              </div>
             </div>
 
             {/* Side Metrics */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <MetricTile label="Seismic Injection" value={seismicRMS.toExponential(2)} unit="m/√Hz" progress={Math.min(100, seismicRMS * 1e12 * 50)} />
-              <MetricTile label="Phase Noise Integral" value={phaseNoiseIntegral.toFixed(3)} unit="rad RMS" progress={Math.min(100, phaseNoiseIntegral * 300)} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <MetricTile label="Seismic RMS" value={seismicRMS.toExponential(2)} unit="m/√Hz" progress={Math.min(100, seismicRMS * 1e12 * 50)} />
+              <MetricTile label="Phase Drift" value={phaseNoiseIntegral.toFixed(1)} unit="rad RMS" progress={Math.min(100, phaseNoiseIntegral * 300)} />
+              <MetricTile label="Coherence Time" value={(1 / state.laserLinewidth * 1e6).toFixed(1)} unit="μs" progress={Math.min(100, 1e6 / state.laserLinewidth)} />
+              <MetricTile label="Finesse (est)" value={(Math.PI / (1 - modeMatchEta + 0.001)).toFixed(0)} unit="" progress={Math.min(100, Math.PI / (1 - modeMatchEta + 0.01) * 2)} />
               <button className="btn-ghost" style={{ marginTop: 'auto', width: '100%', justifyContent: 'center' }}>
                 <DownloadSvg /> Export PSD_Data
               </button>
@@ -514,14 +670,24 @@ const NoiseLegend = ({ color, label, glow }) => (
 );
 
 const MetricTile = ({ label, value, unit, progress }) => (
-  <div style={{ padding: 16, borderRadius: 'var(--radius-md)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-    <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--text-mercury)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 12 }}>{label}</p>
-    <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', color: '#fff', marginBottom: 8 }}>
-      {value} <span style={{ fontSize: 9, opacity: 0.4 }}>{unit}</span>
+  <div style={{ padding: 10, borderRadius: 'var(--radius-md)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+    <p style={{ fontSize: 7, fontWeight: 700, color: 'var(--text-mercury)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 6 }}>{label}</p>
+    <div style={{ fontSize: 16, fontFamily: 'var(--font-mono)', color: '#fff', marginBottom: 4 }}>
+      {value} <span style={{ fontSize: 8, opacity: 0.4 }}>{unit}</span>
     </div>
-    <div style={{ height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+    <div style={{ height: 3, background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
       <div style={{ height: '100%', background: 'rgba(255,255,255,0.4)', width: `${progress}%` }} />
     </div>
+  </div>
+);
+
+const DerivedTile = ({ label, value, unit, formula }) => (
+  <div style={{ padding: 6, borderRadius: 4, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)' }} title={formula}>
+    <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{label}</div>
+    <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#fff' }}>
+      {value} <span style={{ fontSize: 7, opacity: 0.4 }}>{unit}</span>
+    </div>
+    <div style={{ fontSize: 6, fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.15)', marginTop: 1 }}>{formula}</div>
   </div>
 );
 
