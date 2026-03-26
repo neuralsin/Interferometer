@@ -45,7 +45,7 @@ Make sure you have [Node.js](https://nodejs.org/) installed (v18+ recommended), 
 
 1. Clone the repository:
    ```bash
-   git clone <repo-url>
+   git clone <https://github.com/neuralsin/Interferometer>
    cd qthack
    ```
 
@@ -59,7 +59,7 @@ Make sure you have [Node.js](https://nodejs.org/) installed (v18+ recommended), 
    npm run dev
    ```
 
-4. Open your browser to `http://localhost:5173`. *(Note: The pre-compiled WASM binaries in `public/` will load automatically).*
+4. Open your browser to `http://localhost:3000`. *(Note: The pre-compiled WASM binaries in `public/` will load automatically).*
 
 ## 🧪 Physics Authenticity Guarantee
 This simulation enforces strict adherence to physical reality. **Every single data point, label, and graph is derived from first principles.** 
