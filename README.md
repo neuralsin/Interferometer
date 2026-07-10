@@ -2,7 +2,7 @@
 
 A comprehensive, physics-accurate simulation suite for quantum and classical interferometry. This web-based application allows researchers, academics, and engineers to explore wave optics, quantum metrology, and gravitational wave astronomy through real-time, mathematically rigorous simulations. The platform leverages a high-performance **WebAssembly (WASM) C++ physics engine** to compute complex stochastic noise models, phase space evolutions, and interference patterns at native speeds.
 
-## 🚀 Core Features & Physics Models
+##  Core Features & Physics Models
 
 ### 1. Classical Interferometry & Wave Optics
 Calculates exact Gaussian beam propagation dynamics, avoiding simplified ray-optics generalizations:
